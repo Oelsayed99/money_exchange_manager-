@@ -1,0 +1,44 @@
+name: linter
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          npm ci
+
+      # Check, never fix. A workflow that auto-fixes and discards the result
+      # reports success on code that is not actually formatted.
+      - name: Check PHP Formatting
+        run: vendor/bin/pint --test
+
+      - name: Check Frontend Formatting
+        run: npm run format:check
+
+      - name: Lint Frontend
+        run: npx eslint .

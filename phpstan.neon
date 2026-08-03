@@ -1,0 +1,21 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    # 21 inherited errors from the Laravel starter kit and stock config files:
+    # `env()` returning bool|string in config/, and unnarrowed $request->user()
+    # in the scaffolded auth controllers. Baselined rather than silenced so the
+    # debt stays visible and level 8 is enforced on all NEW code from day one.
+    # Burn this down in Phase 7; never add to it to make a new error go away.
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - app
+        - config
+        - database
+        - routes
+
+    level: 8
+
+    # Financial code must not accumulate untyped edges. If a rule here becomes
+    # noisy, narrow it with an explicit ignoreErrors entry and a reason — do not
+    # lower the level.
