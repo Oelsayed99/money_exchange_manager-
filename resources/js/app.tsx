@@ -1,6 +1,6 @@
 import '../css/app.css';
 
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import { route as routeFn } from 'ziggy-js';
@@ -27,3 +27,25 @@ createInertiaApp({
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+/**
+ * Keep the document direction and language in step with the active locale.
+ *
+ * The initial value is server-rendered into app.blade.php. Inertia visits replace the
+ * page component without touching the html element, so after a language switch these
+ * attributes would otherwise remain stale — and the entire RTL layout keys off dir.
+ *
+ * Done as a router subscription rather than a hook so it applies to every page,
+ * including any that do not use a shared layout.
+ */
+router.on('success', (event) => {
+    const props = event.detail.page.props as { locale?: string; direction?: string };
+
+    if (props.direction) {
+        document.documentElement.dir = props.direction;
+    }
+
+    if (props.locale) {
+        document.documentElement.lang = props.locale;
+    }
+});

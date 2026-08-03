@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 use App\Domain\Money\CurrencySpec;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
+use App\Domain\Money\Exceptions\PrecisionLoss;
 use App\Domain\Money\Money;
-use App\Domain\Money\RoundingMode;
 
 function usd(): CurrencySpec
 {
-    return new CurrencySpec('USD', 2, RoundingMode::HalfUp);
+    return new CurrencySpec('USD', 2);
 }
 
 function aed(): CurrencySpec
 {
-    return new CurrencySpec('AED', 2, RoundingMode::HalfUp);
+    return new CurrencySpec('AED', 2);
 }
 
 describe('construction', function (): void {
@@ -27,7 +27,7 @@ describe('construction', function (): void {
     });
 
     it('accepts negative amounts, because losses and payables are real', function (): void {
-        expect(Money::of('-42.50', usd())->toCurrencyScale())->toBe('-42.50');
+        expect(Money::of('-42.50', usd())->toDisplayString())->toBe('-42.50');
     });
 
     // strict_types + the string|int parameter mean a float is a TypeError rather than
@@ -41,7 +41,7 @@ describe('construction', function (): void {
         expect(fn () => Money::of('1e5', usd()))->toThrow(InvalidArgumentException::class);
     });
 
-    it('rejects precision beyond the storage scale instead of silently rounding it', function (): void {
+    it('rejects precision beyond the storage scale rather than discarding it', function (): void {
         expect(fn () => Money::of('1.12345678901', usd()))
             ->toThrow(InvalidArgumentException::class, 'carries more than 10 decimal places');
     });
@@ -67,7 +67,7 @@ describe('exact arithmetic', function (): void {
             $total = $total->plus(Money::of('0.01', usd()));
         }
 
-        expect($total->toCurrencyScale())->toBe('10.00');
+        expect($total->toDisplayString())->toBe('10.00');
     });
 
     it('subtracts exactly', function (): void {
@@ -86,7 +86,7 @@ describe('exact arithmetic', function (): void {
         $original = Money::of('10.00', usd());
         $original->plus(Money::of('5.00', usd()));
 
-        expect($original->toCurrencyScale())->toBe('10.00');
+        expect($original->toDisplayString())->toBe('10.00');
     });
 });
 
@@ -111,56 +111,71 @@ describe('currency safety', function (): void {
     });
 });
 
-describe('multiplication and division', function (): void {
-    it('multiplies by a rate carrying more precision than storage', function (): void {
-        expect(Money::of('1000', usd())->multipliedBy('3.671234567891')->toStorageString())
-            ->toBe('3671.2345678910');
+describe('multiplication is exact or it fails', function (): void {
+    it('multiplies exactly', function (): void {
+        expect(Money::of('1000', usd())->multipliedBy('3.6712345678')->toStorageString())
+            ->toBe('3671.2345678000');
     });
 
-    // Section 2's worked example, arithmetically: delivering 1,000 units at a customer
-    // rate of 3.67 against a cost rate of 3.65 yields exactly 20 of gross profit.
-    // The semantic wiring of legs and rates lands in Phase 4; this asserts the maths.
+    // Section 2's worked example: delivering 1,000 units at a customer rate of 3.67
+    // against a cost rate of 3.65 yields exactly 20 of gross profit.
     it('reproduces the specification profit example exactly', function (): void {
         $delivered = Money::of('1000', aed());
 
         $customerValue = $delivered->multipliedBy('3.67');
         $costValue = $delivered->multipliedBy('3.65');
 
-        expect($customerValue->minus($costValue)->toCurrencyScale())->toBe('20.00');
+        expect($customerValue->minus($costValue)->toDisplayString())->toBe('20.00');
     });
 
-    it('divides', function (): void {
-        expect(Money::of('10', usd())->dividedBy('4')->toCurrencyScale())->toBe('2.50');
+    // Nothing rounds. A product that will not fit is a loud failure, not a quiet
+    // adjustment of somebody's money.
+    it('throws rather than discard a digit it cannot represent', function (): void {
+        expect(fn () => Money::of('1', usd())->multipliedBy('0.00000000005'))
+            ->toThrow(PrecisionLoss::class, 'needs more than 10 decimal places');
+    });
+
+    it('allows a product that fits exactly at the boundary', function (): void {
+        expect(Money::of('1', usd())->multipliedBy('0.0000000001')->toStorageString())
+            ->toBe('0.0000000001');
+    });
+
+    it('multiplies by zero and by one', function (): void {
+        expect(Money::of('12.34', usd())->multipliedBy('0')->isZero())->toBeTrue()
+            ->and(Money::of('12.34', usd())->multipliedBy('1')->toDisplayString())->toBe('12.34');
+    });
+});
+
+describe('division truncates and never rounds', function (): void {
+    it('divides exactly when it can', function (): void {
+        expect(Money::of('10', usd())->dividedBy('4')->toDisplayString())->toBe('2.50');
+    });
+
+    // 10 / 3 does not terminate. The result is cut, never rounded up: the tenth
+    // decimal stays 3 rather than becoming 4.
+    it('truncates a non-terminating quotient rather than rounding it', function (): void {
+        expect(Money::of('10', usd())->dividedBy('3')->toStorageString())->toBe('3.3333333333');
+    });
+
+    it('truncates toward zero for negatives too', function (): void {
+        expect(Money::of('-10', usd())->dividedBy('3')->toStorageString())->toBe('-3.3333333333');
+    });
+
+    // Under any rounding rule this would end ...6667. It does not.
+    it('never rounds a quotient up', function (): void {
+        expect(Money::of('20', usd())->dividedBy('3')->toStorageString())->toBe('6.6666666666');
+    });
+
+    it('reports whether a division would be exact', function (): void {
+        $ten = Money::of('10', usd());
+
+        expect($ten->divisionIsExact('4'))->toBeTrue()
+            ->and($ten->divisionIsExact('3'))->toBeFalse()
+            ->and($ten->divisionIsExact('0'))->toBeFalse();
     });
 
     it('refuses division by zero', function (): void {
         expect(fn () => Money::of('10', usd())->dividedBy('0'))->toThrow(DivisionByZeroError::class);
-    });
-
-    it('uses the currency rounding mode by default', function (): void {
-        $halfEven = new CurrencySpec('XTS', 0, RoundingMode::HalfEven);
-
-        // 5 x 0.5 = 2.5, which HalfEven resolves to 2 rather than 3.
-        expect(Money::of('5', $halfEven)->multipliedBy('0.5')->toCurrencyScale())->toBe('2');
-    });
-
-    it('accepts a display rounding override', function (): void {
-        $money = Money::of('2.5', new CurrencySpec('XTS', 0, RoundingMode::HalfEven));
-
-        expect($money->toCurrencyScale())->toBe('2')
-            ->and($money->toCurrencyScale(RoundingMode::HalfUp))->toBe('3');
-    });
-
-    // The override on multipliedBy() governs the storage scale, not the display scale,
-    // so it only bites when a product carries more than SCALE decimal places.
-    it('applies a rounding override at the storage scale', function (): void {
-        $money = Money::of('1', usd());
-
-        // 1 x 0.00000000005 is a tie at the eleventh decimal place.
-        expect($money->multipliedBy('0.00000000005', RoundingMode::HalfUp)->toStorageString())
-            ->toBe('0.0000000001')
-            ->and($money->multipliedBy('0.00000000005', RoundingMode::Down)->toStorageString())
-            ->toBe('0.0000000000');
     });
 });
 
@@ -172,9 +187,9 @@ describe('sign and comparison', function (): void {
     });
 
     it('negates and takes absolute value', function (): void {
-        expect(Money::of('-5', usd())->negated()->toCurrencyScale())->toBe('5.00')
-            ->and(Money::of('-5', usd())->absolute()->toCurrencyScale())->toBe('5.00')
-            ->and(Money::of('5', usd())->absolute()->toCurrencyScale())->toBe('5.00');
+        expect(Money::of('-5', usd())->negated()->toDisplayString())->toBe('5.00')
+            ->and(Money::of('-5', usd())->absolute()->toDisplayString())->toBe('5.00')
+            ->and(Money::of('5', usd())->absolute()->toDisplayString())->toBe('5.00');
     });
 
     it('never yields a negative zero when negating zero', function (): void {
@@ -187,17 +202,32 @@ describe('sign and comparison', function (): void {
     });
 });
 
-describe('presentation and transport', function (): void {
-    it('rounds to the currency precision for display', function (): void {
-        expect(Money::of('1.005', usd())->toCurrencyScale())->toBe('1.01');
+describe('display shows exactly what is held', function (): void {
+    it('pads out to the currency precision', function (): void {
+        expect(Money::of('1000', usd())->toDisplayString())->toBe('1000.00')
+            ->and(Money::of('1234.5', usd())->toDisplayString())->toBe('1234.50');
+    });
+
+    // The critical property: display never rounds an amount down to the currency's
+    // precision. A sub-cent balance is shown, not hidden.
+    it('shows every significant digit, beyond the currency precision', function (): void {
+        expect(Money::of('1000.123456', usd())->toDisplayString())->toBe('1000.123456')
+            ->and(Money::of('1.005', usd())->toDisplayString())->toBe('1.005')
+            ->and(Money::of('0.0000000001', usd())->toDisplayString())->toBe('0.0000000001');
     });
 
     it('respects a zero-decimal currency', function (): void {
-        expect(Money::of('1234.56', new CurrencySpec('JPY', 0))->toCurrencyScale())->toBe('1235');
+        expect(Money::of('1234', new CurrencySpec('JPY', 0))->toDisplayString())->toBe('1234')
+            ->and(Money::of('1234.5', new CurrencySpec('JPY', 0))->toDisplayString())->toBe('1234.5');
     });
 
     it('respects a three-decimal currency', function (): void {
-        expect(Money::of('1.2345', new CurrencySpec('KWD', 3))->toCurrencyScale())->toBe('1.235');
+        expect(Money::of('1', new CurrencySpec('KWD', 3))->toDisplayString())->toBe('1.000')
+            ->and(Money::of('1.2345', new CurrencySpec('KWD', 3))->toDisplayString())->toBe('1.2345');
+    });
+
+    it('displays zero cleanly', function (): void {
+        expect(Money::zero(usd())->toDisplayString())->toBe('0.00');
     });
 
     // Risk R1: JavaScript's number is float64, so money must cross the boundary as a
@@ -211,7 +241,7 @@ describe('presentation and transport', function (): void {
         expect(json_encode($payload))->toBe('{"amount":"3670.50","currency":"AED"}');
     });
 
-    it('casts to string at currency precision', function (): void {
+    it('casts to string for display', function (): void {
         expect((string) Money::of('42', usd()))->toBe('42.00');
     });
 });

@@ -7,14 +7,15 @@ namespace App\Domain\Money;
 use InvalidArgumentException;
 
 /**
- * The precision and rounding policy of a single currency.
+ * The display precision of a single currency.
  *
  * Deliberately a plain immutable object rather than the Eloquent model: Money is a
  * domain value type and must be constructible and testable without a database. The
  * Currency model produces one of these via Currency::spec().
  *
- * Section 3 requires precision to be defined independently per currency, which is why
- * decimalPlaces travels with the currency rather than being a global constant.
+ * decimalPlaces is a *minimum* for display, never a rounding instruction. A USD amount
+ * of 1000 is shown as 1000.00; a USD amount of 1000.123456 is shown in full. Nothing
+ * in this system rounds an amount to a currency's precision.
  */
 final readonly class CurrencySpec
 {
@@ -24,7 +25,6 @@ final readonly class CurrencySpec
     public function __construct(
         public string $code,
         public int $decimalPlaces = 2,
-        public RoundingMode $roundingMode = RoundingMode::HalfUp,
     ) {
         if (trim($code) === '') {
             throw new InvalidArgumentException('Currency code must not be empty.');

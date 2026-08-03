@@ -13,21 +13,23 @@ use InvalidArgumentException;
  * never used for money, per Section 3: in IEEE-754, `0.1 + 0.2 !== 0.3`, and a ledger
  * cannot absorb that class of error.
  *
- * Two things this class exists to handle:
+ * **Nothing in this system rounds.** There is no rounding mode, no half-up, no
+ * banker's rounding, and no per-currency rounding policy. An amount is never nudged
+ * up, and never nudged to a nearest value.
  *
- * 1. bcmath *truncates* to the requested scale rather than rounding. `bcadd('0.999',
- *    '0', 2)` is '0.99', not '1.00'. Every rounding rule is therefore implemented
- *    explicitly here instead of being delegated to the bc* scale argument.
+ * The one thing that is unavoidable is *truncation*, and only for division: 10 ÷ 3
+ * does not terminate, so a finite representation has to stop somewhere. Truncation is
+ * not rounding — it only ever drops digits toward zero, so a value can never grow, and
+ * it happens at the tenth decimal place, far below the significance of any currency.
  *
- * 2. PHP 8.4 added bcround() and BcMath\Number, which would do much of this. They are
- *    deliberately not used: composer.json requires PHP ^8.3 and CI runs an 8.3 matrix
- *    leg, so the implementation must work without them.
+ * bcmath already truncates rather than rounds, which is exactly the behaviour wanted
+ * here, so the bc* scale argument is used directly.
  */
 final class Decimal
 {
     /**
      * Scale for intermediate results. Sits well above any storage scale so that
-     * products and quotients keep full precision until an explicit rounding step.
+     * products keep full precision through a calculation.
      */
     public const int WORKING_SCALE = 24;
 
@@ -71,13 +73,36 @@ final class Decimal
     }
 
     /**
-     * Re-express a value at an exact scale. Truncates toward zero when the value
-     * carries more decimals than requested — callers wanting a rounding rule applied
-     * must use round() instead.
+     * Pad a value out to at least the given scale, without ever losing a digit.
+     *
+     * A value already carrying more decimals than requested is returned unchanged.
+     * This is the only formatting operation used for display, which is why display
+     * can never alter an amount.
      *
      * @return numeric-string
      */
-    public static function atScale(string $value, int $scale): string
+    public static function padTo(string $value, int $scale): string
+    {
+        self::assertValid($value);
+        self::assertScale($scale);
+
+        if (self::scaleOf($value) >= $scale) {
+            return self::normaliseZero($value);
+        }
+
+        return self::normaliseZero(bcadd($value, '0', $scale));
+    }
+
+    /**
+     * Drop digits beyond the given scale, toward zero.
+     *
+     * This is truncation, not rounding: 0.999 at scale 2 is 0.99, and -0.999 at scale
+     * 2 is -0.99. Magnitude never increases. Reserved for division, where a finite
+     * representation is mathematically impossible to guarantee.
+     *
+     * @return numeric-string
+     */
+    public static function truncateTo(string $value, int $scale): string
     {
         self::assertValid($value);
         self::assertScale($scale);
@@ -86,79 +111,15 @@ final class Decimal
     }
 
     /**
-     * Round a decimal string to the given scale using the given rule.
+     * Whether reducing this value to the given scale would discard a non-zero digit.
      *
-     * Implemented on the absolute value, with the sign reapplied at the end, so that
-     * every mode has a single definition of "away from zero" rather than each needing
-     * separate positive and negative branches.
+     * Lets callers refuse to lose precision rather than silently accept truncation.
      *
-     * @return numeric-string
+     * @param  numeric-string  $value
      */
-    public static function round(string $value, int $scale, RoundingMode $mode): string
+    public static function losesPrecisionAt(string $value, int $scale): bool
     {
-        self::assertValid($value);
-        self::assertScale($scale);
-
-        if (self::scaleOf($value) <= $scale) {
-            return self::atScale($value, $scale);
-        }
-
-        $negative = bccomp($value, '0', self::WORKING_SCALE) < 0;
-        $absolute = $negative ? bcmul($value, '-1', self::WORKING_SCALE) : $value;
-
-        $truncated = bcadd($absolute, '0', $scale);
-        $remainder = bcsub($absolute, $truncated, self::WORKING_SCALE);
-
-        $hasRemainder = bccomp($remainder, '0', self::WORKING_SCALE) > 0;
-        $tie = bccomp($remainder, self::halfUnit($scale), self::WORKING_SCALE);
-
-        $awayFromZero = match ($mode) {
-            RoundingMode::Up => $hasRemainder,
-            RoundingMode::Down => false,
-            RoundingMode::Ceiling => $hasRemainder && ! $negative,
-            RoundingMode::Floor => $hasRemainder && $negative,
-            RoundingMode::HalfUp => $tie >= 0,
-            RoundingMode::HalfDown => $tie > 0,
-            RoundingMode::HalfEven => $tie > 0 || ($tie === 0 && self::isOdd($truncated, $scale)),
-        };
-
-        $result = $awayFromZero
-            ? bcadd($truncated, self::unit($scale), $scale)
-            : $truncated;
-
-        return self::normaliseZero($negative ? bcmul($result, '-1', $scale) : $result);
-    }
-
-    /**
-     * One unit at the given scale: scale 2 → '0.01', scale 0 → '1'.
-     *
-     * @return numeric-string
-     */
-    private static function unit(int $scale): string
-    {
-        return bcdiv('1', bcpow('10', (string) $scale), $scale);
-    }
-
-    /**
-     * Half a unit at the given scale: scale 2 → '0.005', scale 0 → '0.5'.
-     *
-     * @return numeric-string
-     */
-    private static function halfUnit(int $scale): string
-    {
-        return bcdiv('5', bcpow('10', (string) ($scale + 1)), $scale + 1);
-    }
-
-    /**
-     * Whether the last retained digit is odd — the tie-break for HalfEven.
-     *
-     * @param  numeric-string  $truncated
-     */
-    private static function isOdd(string $truncated, int $scale): bool
-    {
-        $asInteger = bcmul($truncated, bcpow('10', (string) $scale), 0);
-
-        return bcmod($asInteger, '2') !== '0';
+        return bccomp($value, bcadd($value, '0', $scale), self::WORKING_SCALE) !== 0;
     }
 
     /**

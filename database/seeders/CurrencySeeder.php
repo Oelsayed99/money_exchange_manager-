@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Domain\Money\RoundingMode;
 use App\Models\Currency;
 use Illuminate\Database\Seeder;
 
@@ -31,13 +30,12 @@ final class CurrencySeeder extends Seeder
 
         foreach ($currencies as $currency) {
             // Idempotent: seeding an existing database must not duplicate currencies
-            // or reset an administrator's precision and rounding choices.
+            // or reset an administrator's display-precision choices.
             Currency::query()->updateOrCreate(
                 ['code' => $currency['code']],
                 [
                     ...$currency,
                     'decimal_places' => 2,
-                    'rounding_mode' => RoundingMode::HalfUp,
                     'is_active' => true,
                 ],
             );

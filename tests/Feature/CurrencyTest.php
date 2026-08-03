@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Domain\Money\CurrencySpec;
-use App\Domain\Money\RoundingMode;
 use App\Models\Currency;
 use Database\Seeders\CurrencySeeder;
 use Illuminate\Database\QueryException;
@@ -43,11 +42,6 @@ describe('schema', function (): void {
 });
 
 describe('casts', function (): void {
-    it('casts the rounding mode to an enum', function (): void {
-        $currency = Currency::factory()->withRounding(RoundingMode::HalfEven)->create();
-
-        expect($currency->fresh()?->rounding_mode)->toBe(RoundingMode::HalfEven);
-    });
 
     it('casts flags and integers', function (): void {
         $currency = Currency::factory()->inactive()->create(['sort_order' => 7])->fresh();
@@ -63,28 +57,30 @@ describe('domain bridge', function (): void {
         $currency = Currency::factory()->create([
             'code' => 'AED',
             'decimal_places' => 2,
-            'rounding_mode' => RoundingMode::HalfUp,
         ]);
 
         $spec = $currency->spec();
 
         expect($spec)->toBeInstanceOf(CurrencySpec::class)
             ->and($spec->code)->toBe('AED')
-            ->and($spec->decimalPlaces)->toBe(2)
-            ->and($spec->roundingMode)->toBe(RoundingMode::HalfUp);
+            ->and($spec->decimalPlaces)->toBe(2);
     });
 
     it('builds money in its own currency', function (): void {
         $currency = Currency::factory()->create(['code' => 'AED', 'decimal_places' => 2]);
 
-        expect($currency->money('3670.5')->toCurrencyScale())->toBe('3670.50')
+        expect($currency->money('3670.5')->toDisplayString())->toBe('3670.50')
             ->and($currency->zero()->isZero())->toBeTrue();
     });
 
-    it('applies its own precision and rounding rule', function (): void {
+    it('pads to its own precision without ever cutting a digit', function (): void {
         $jpy = Currency::factory()->create(['code' => 'JPY', 'decimal_places' => 0]);
+        $kwd = Currency::factory()->create(['code' => 'KWD', 'decimal_places' => 3]);
 
-        expect($jpy->money('1234.56')->toCurrencyScale())->toBe('1235');
+        expect($jpy->money('1234')->toDisplayString())->toBe('1234')
+            ->and($kwd->money('1')->toDisplayString())->toBe('1.000')
+            // Nothing rounds: a value more precise than the currency is shown in full.
+            ->and($jpy->money('1234.56')->toDisplayString())->toBe('1234.56');
     });
 });
 

@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Domain\Money\CurrencySpec;
-use App\Domain\Money\RoundingMode;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +26,9 @@ return new class extends Migration
 
             // Section 3: precision is defined independently per currency.
             $table->unsignedTinyInteger('decimal_places')->default(2);
-            $table->string('rounding_mode', 20)->default(RoundingMode::HalfUp->value);
+            // Dropped again by a later migration: nothing in this system rounds.
+            // Left in place rather than rewritten because this migration is already published.
+            $table->string('rounding_mode', 20)->default('half_up');
 
             $table->boolean('is_active')->default(true);
             $table->unsignedSmallInteger('sort_order')->default(0);

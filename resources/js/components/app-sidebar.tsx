@@ -1,34 +1,31 @@
-import { NavFooter } from '@/components/nav-footer';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import { useTranslations } from '@/lib/i18n';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-react';
+import { Coins, LayoutGrid } from 'lucide-react';
 import AppLogo from './app-logo';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        url: '/dashboard',
-        icon: LayoutGrid,
-    },
-];
-
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        url: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        url: 'https://laravel.com/docs/starter-kits',
-        icon: BookOpen,
-    },
-];
-
 export function AppSidebar() {
+    const { t } = useTranslations();
+
+    // Built inside the component rather than at module scope so labels re-resolve when
+    // the language changes. Section 12: no hardcoded interface strings.
+    const mainNavItems: NavItem[] = [
+        {
+            title: t('nav.dashboard'),
+            url: '/dashboard',
+            icon: LayoutGrid,
+        },
+        {
+            title: t('nav.currencies'),
+            url: '/currencies',
+            icon: Coins,
+        },
+    ];
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -48,7 +45,11 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                {/* The starter kit's links to Laravel's own repository and docs are
+                    removed; they are not navigation for this application. */}
+                <div className="px-2 group-data-[collapsible=icon]:hidden">
+                    <LanguageSwitcher />
+                </div>
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

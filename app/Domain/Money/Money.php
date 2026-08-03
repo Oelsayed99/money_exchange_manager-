@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Money;
 
 use App\Domain\Money\Exceptions\CurrencyMismatch;
+use App\Domain\Money\Exceptions\PrecisionLoss;
 use DivisionByZeroError;
 use InvalidArgumentException;
 use JsonSerializable;
@@ -17,17 +18,17 @@ use Stringable;
  * at SCALE, never PHP floats — `declare(strict_types=1)` plus the `string|int` parameter
  * type means passing a float to of() is a TypeError rather than a silent precision loss.
  *
- * Two rules this type enforces that the rest of the system depends on:
+ * **No operation rounds.** Addition, subtraction and multiplication are exact. Display
+ * is exact. The only lossy operation is division, which truncates toward zero at SCALE
+ * because a terminating representation cannot be guaranteed — and truncation only ever
+ * drops digits, so an amount can never grow.
  *
- * - Money of different currencies can never be added, subtracted or ordered. Conversion
- *   is an explicit rate-bearing exchange operation, not an implicit coercion.
- * - Addition and subtraction are exact at SCALE and never round. Only multiplication and
- *   division — the operations that genuinely produce new precision — apply a rounding
- *   rule, and they default to the currency's own configured rule.
+ * Money of different currencies can never be added, subtracted or ordered. Conversion
+ * is an explicit rate-bearing exchange operation, not an implicit coercion.
  */
 final readonly class Money implements JsonSerializable, Stringable
 {
-    /** Internal scale, matching the DECIMAL(28,10) storage columns. */
+    /** Internal scale. Every amount is held at exactly this many decimal places. */
     public const int SCALE = 10;
 
     /**
@@ -41,8 +42,8 @@ final readonly class Money implements JsonSerializable, Stringable
     /**
      * Construct from an exact decimal string or integer.
      *
-     * Rejects values carrying more precision than SCALE rather than silently rounding
-     * them: discarding precision is a decision the caller must make explicitly, because
+     * Rejects values carrying more precision than SCALE rather than quietly discarding
+     * the excess: losing a digit is a decision the caller must make explicitly, because
      * whichever way it goes it is somebody's money.
      */
     public static function of(string|int $amount, CurrencySpec $currency): self
@@ -53,37 +54,37 @@ final readonly class Money implements JsonSerializable, Stringable
 
         if (Decimal::scaleOf($value) > self::SCALE) {
             throw new InvalidArgumentException(
-                "Amount [{$value}] carries more than ".self::SCALE.' decimal places. '
-                .'Round it explicitly before constructing Money.'
+                "Amount [{$value}] carries more than ".self::SCALE.' decimal places, '
+                .'which cannot be represented without discarding digits.'
             );
         }
 
-        return new self(Decimal::atScale($value, self::SCALE), $currency);
+        return new self(Decimal::padTo($value, self::SCALE), $currency);
     }
 
     public static function zero(CurrencySpec $currency): self
     {
-        return new self(Decimal::atScale('0', self::SCALE), $currency);
+        return new self(Decimal::padTo('0', self::SCALE), $currency);
     }
 
-    /** Exact: two SCALE-precision values cannot produce a third that needs rounding. */
+    /** Exact. */
     public function plus(self $other): self
     {
         $this->assertSameCurrency($other, 'add');
 
         return new self(
-            Decimal::atScale(bcadd($this->amount, $other->amount, self::SCALE), self::SCALE),
+            Decimal::padTo(bcadd($this->amount, $other->amount, self::SCALE), self::SCALE),
             $this->currency,
         );
     }
 
-    /** Exact, for the same reason as plus(). */
+    /** Exact. */
     public function minus(self $other): self
     {
         $this->assertSameCurrency($other, 'subtract');
 
         return new self(
-            Decimal::atScale(bcsub($this->amount, $other->amount, self::SCALE), self::SCALE),
+            Decimal::padTo(bcsub($this->amount, $other->amount, self::SCALE), self::SCALE),
             $this->currency,
         );
     }
@@ -91,25 +92,37 @@ final readonly class Money implements JsonSerializable, Stringable
     /**
      * Multiply by a scalar — an exchange rate, a percentage, a quantity.
      *
-     * The factor is a decimal string, not a Money: multiplying money by money is
-     * meaningless. Computed at WORKING_SCALE and rounded back to SCALE once, so a
-     * rate carrying 12 decimal places does not lose digits mid-calculation.
+     * Exact. The factor is a decimal string, not a Money: multiplying money by money is
+     * meaningless. If the product would carry more than SCALE decimal places, this
+     * throws rather than discarding digits, so a rate too precise to represent is a
+     * loud failure instead of a silent one.
      */
-    public function multipliedBy(string $factor, ?RoundingMode $mode = null): self
+    public function multipliedBy(string $factor): self
     {
         Decimal::assertValid($factor);
 
-        return new self(
-            Decimal::round(
-                bcmul($this->amount, $factor, Decimal::WORKING_SCALE),
-                self::SCALE,
-                $mode ?? $this->currency->roundingMode,
-            ),
-            $this->currency,
-        );
+        $product = bcmul($this->amount, $factor, Decimal::WORKING_SCALE);
+
+        if (Decimal::losesPrecisionAt($product, self::SCALE)) {
+            throw PrecisionLoss::inMultiplication($this->amount, $factor, $product, self::SCALE);
+        }
+
+        // The product is computed at WORKING_SCALE and so carries trailing zeros. The
+        // guard above has already established that nothing significant sits beyond
+        // SCALE, so reducing to it here discards zeros only and remains exact.
+        return new self(Decimal::truncateTo($product, self::SCALE), $this->currency);
     }
 
-    public function dividedBy(string $divisor, ?RoundingMode $mode = null): self
+    /**
+     * Divide by a scalar.
+     *
+     * The one operation that cannot be exact: 10 ÷ 3 does not terminate. The quotient
+     * is **truncated** toward zero at SCALE, never rounded, so the result can never
+     * exceed the true value. Digits are lost at the tenth decimal place — far below the
+     * significance of any currency, but lost nonetheless, which is why this is the only
+     * method in the class that admits to it.
+     */
+    public function dividedBy(string $divisor): self
     {
         Decimal::assertValid($divisor);
 
@@ -117,19 +130,29 @@ final readonly class Money implements JsonSerializable, Stringable
             throw new DivisionByZeroError('Cannot divide a monetary amount by zero.');
         }
 
-        return new self(
-            Decimal::round(
-                bcdiv($this->amount, $divisor, Decimal::WORKING_SCALE),
-                self::SCALE,
-                $mode ?? $this->currency->roundingMode,
-            ),
-            $this->currency,
+        $quotient = bcdiv($this->amount, $divisor, Decimal::WORKING_SCALE);
+
+        return new self(Decimal::truncateTo($quotient, self::SCALE), $this->currency);
+    }
+
+    /** Whether dividing by this divisor would discard a non-zero digit. */
+    public function divisionIsExact(string $divisor): bool
+    {
+        Decimal::assertValid($divisor);
+
+        if (bccomp($divisor, '0', Decimal::WORKING_SCALE) === 0) {
+            return false;
+        }
+
+        return ! Decimal::losesPrecisionAt(
+            bcdiv($this->amount, $divisor, Decimal::WORKING_SCALE),
+            self::SCALE,
         );
     }
 
     public function negated(): self
     {
-        return new self(Decimal::atScale(bcmul($this->amount, '-1', self::SCALE), self::SCALE), $this->currency);
+        return new self(Decimal::padTo(bcmul($this->amount, '-1', self::SCALE), self::SCALE), $this->currency);
     }
 
     public function absolute(): self
@@ -188,21 +211,29 @@ final readonly class Money implements JsonSerializable, Stringable
     }
 
     /**
-     * Rounded to the currency's own precision, using the currency's own rule.
+     * The amount as a person should see it.
      *
-     * This is the point where rounding becomes visible to a person, so it accepts an
-     * override for the cases that need one — a report using banker's rounding, or a
-     * statement that must match a counterparty's convention. The override on
-     * multipliedBy() governs the internal storage scale instead, where the extra
-     * digits are still available and the choice rarely changes anything.
+     * Exact. Trailing zeros beyond the currency's declared precision are dropped, but a
+     * significant digit never is: USD 1000 renders as "1000.00", and USD 1000.123456
+     * renders as "1000.123456" rather than being rounded to two places. Display shows
+     * what is held, always.
+     *
+     * @return numeric-string
      */
-    public function toCurrencyScale(?RoundingMode $mode = null): string
+    public function toDisplayString(): string
     {
-        return Decimal::round(
-            $this->amount,
-            $this->currency->decimalPlaces,
-            $mode ?? $this->currency->roundingMode,
-        );
+        $minimum = $this->currency->decimalPlaces;
+
+        // Drop only trailing zeros, and only down to the currency's own precision.
+        $trimmed = $this->amount;
+
+        while (Decimal::scaleOf($trimmed) > $minimum && str_ends_with($trimmed, '0')) {
+            $trimmed = substr($trimmed, 0, -1);
+        }
+
+        $trimmed = rtrim($trimmed, '.');
+
+        return Decimal::padTo($trimmed === '' ? '0' : $trimmed, $minimum);
     }
 
     /**
@@ -217,14 +248,14 @@ final readonly class Money implements JsonSerializable, Stringable
     public function jsonSerialize(): array
     {
         return [
-            'amount' => $this->toCurrencyScale(),
+            'amount' => $this->toDisplayString(),
             'currency' => $this->currency->code,
         ];
     }
 
     public function __toString(): string
     {
-        return $this->toCurrencyScale();
+        return $this->toDisplayString();
     }
 
     private function assertSameCurrency(self $other, string $operation): void

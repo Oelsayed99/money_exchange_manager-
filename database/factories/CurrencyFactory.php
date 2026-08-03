@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
-use App\Domain\Money\RoundingMode;
 use App\Models\Currency;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -24,7 +23,6 @@ final class CurrencyFactory extends Factory
             'name_ar' => null,
             'symbol' => '¤',
             'decimal_places' => 2,
-            'rounding_mode' => RoundingMode::HalfUp,
             'is_active' => true,
             'sort_order' => 0,
         ];
@@ -33,11 +31,6 @@ final class CurrencyFactory extends Factory
     public function withDecimalPlaces(int $places): self
     {
         return $this->state(fn (): array => ['decimal_places' => $places]);
-    }
-
-    public function withRounding(RoundingMode $mode): self
-    {
-        return $this->state(fn (): array => ['rounding_mode' => $mode]);
     }
 
     public function inactive(): self

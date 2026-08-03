@@ -6,7 +6,6 @@ namespace App\Models;
 
 use App\Domain\Money\CurrencySpec;
 use App\Domain\Money\Money;
-use App\Domain\Money\RoundingMode;
 use Database\Factories\CurrencyFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,9 +14,10 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * An administrator-managed currency.
  *
- * Adding a currency is a data operation, never a code change (Section 1). Precision and
- * rounding policy live here per currency (Section 3) and are handed to the domain layer
- * as an immutable CurrencySpec.
+ * Adding a currency is a data operation, never a code change (Section 1). Display
+ * precision lives here per currency (Section 3) and is handed to the domain layer as an
+ * immutable CurrencySpec. It is a minimum for display, never a rounding instruction —
+ * nothing in this system rounds.
  *
  * @property int $id
  * @property string $code
@@ -25,7 +25,6 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $name_ar
  * @property string|null $symbol
  * @property int $decimal_places
- * @property RoundingMode $rounding_mode
  * @property bool $is_active
  * @property int $sort_order
  *
@@ -42,7 +41,6 @@ final class Currency extends Model
         'name_ar',
         'symbol',
         'decimal_places',
-        'rounding_mode',
         'is_active',
         'sort_order',
     ];
@@ -52,7 +50,6 @@ final class Currency extends Model
     {
         return [
             'decimal_places' => 'integer',
-            'rounding_mode' => RoundingMode::class,
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];
@@ -77,7 +74,6 @@ final class Currency extends Model
         return new CurrencySpec(
             code: $this->code,
             decimalPlaces: $this->decimal_places,
-            roundingMode: $this->rounding_mode,
         );
     }
 
