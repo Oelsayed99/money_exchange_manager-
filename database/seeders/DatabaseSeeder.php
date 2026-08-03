@@ -13,7 +13,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Reference data first: currencies are a prerequisite for every financial
+        // record the system will hold.
+        $this->call(CurrencySeeder::class);
 
         User::factory()->create([
             'name' => 'Test User',
