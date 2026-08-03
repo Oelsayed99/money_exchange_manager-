@@ -3,6 +3,7 @@ import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { useTranslations } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { Coins, LayoutGrid } from 'lucide-react';
@@ -10,6 +11,7 @@ import AppLogo from './app-logo';
 
 export function AppSidebar() {
     const { t } = useTranslations();
+    const { can } = usePermissions();
 
     // Built inside the component rather than at module scope so labels re-resolve when
     // the language changes. Section 12: no hardcoded interface strings.
@@ -19,11 +21,17 @@ export function AppSidebar() {
             url: '/dashboard',
             icon: LayoutGrid,
         },
-        {
-            title: t('nav.currencies'),
-            url: '/currencies',
-            icon: Coins,
-        },
+        // Navigation reflects permissions so a user is not sent to a page that will
+        // refuse them. The route is guarded regardless.
+        ...(can('currencies.view')
+            ? [
+                  {
+                      title: t('nav.currencies'),
+                      url: '/currencies',
+                      icon: Coins,
+                  },
+              ]
+            : []),
     ];
 
     return (

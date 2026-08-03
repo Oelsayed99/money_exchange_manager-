@@ -7,6 +7,7 @@ namespace App\Http\Requests;
 use App\Domain\Money\CurrencySpec;
 use App\Models\Currency;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 /**
@@ -17,11 +18,18 @@ use Illuminate\Validation\Rule;
  */
 final class CurrencyRequest extends FormRequest
 {
+    /**
+     * Authorization runs here rather than in the controller so that a request without
+     * the permission is rejected before any validation, and therefore before any hint
+     * about what the form expects leaks back to the caller.
+     */
     public function authorize(): bool
     {
-        // Routes are behind the auth middleware. Fine-grained permissions arrive with
-        // the roles and permissions step; this is not yet the Section 14 matrix.
-        return true;
+        $currency = $this->route('currency');
+
+        return $currency instanceof Currency
+            ? Gate::allows('update', $currency)
+            : Gate::allows('create', Currency::class);
     }
 
     /** @return array<string, list<mixed>> */

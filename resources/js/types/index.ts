@@ -2,6 +2,8 @@ import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
     user: User;
+    /** Only the permissions this user holds. Presentation only — the backend is the gate. */
+    permissions: string[];
 }
 
 export interface BreadcrumbItem {

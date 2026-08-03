@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CurrencyRequest;
 use App\Models\Currency;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,6 +22,8 @@ final class CurrencyController extends Controller
 {
     public function index(): Response
     {
+        Gate::authorize('viewAny', Currency::class);
+
         $currencies = Currency::query()
             ->orderBy('sort_order')
             ->orderBy('code')
@@ -35,6 +38,8 @@ final class CurrencyController extends Controller
 
     public function create(): Response
     {
+        Gate::authorize('create', Currency::class);
+
         return Inertia::render('currencies/form', [
             'currency' => null,
         ]);
@@ -49,6 +54,8 @@ final class CurrencyController extends Controller
 
     public function edit(Currency $currency): Response
     {
+        Gate::authorize('update', $currency);
+
         return Inertia::render('currencies/form', [
             'currency' => $this->present($currency),
         ]);

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
+import { usePermissions } from '@/lib/permissions';
 import type { BreadcrumbItem, SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Check, CircleSlash, Pencil, Plus } from 'lucide-react';
@@ -20,6 +21,8 @@ interface CurrencyRow {
 
 export default function CurrenciesIndex({ currencies }: { currencies: CurrencyRow[] }) {
     const { t } = useTranslations();
+    const { can } = usePermissions();
+    const canManage = can('currencies.manage');
     const flash = usePage<SharedData>().props.flash;
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: t('nav.currencies'), href: '/currencies' }];
@@ -45,12 +48,14 @@ export default function CurrenciesIndex({ currencies }: { currencies: CurrencyRo
                         <p className="text-muted-foreground max-w-2xl text-sm">{t('currencies.description')}</p>
                     </div>
 
-                    <Button asChild>
-                        <Link href="/currencies/create">
-                            <Plus className="size-4" aria-hidden="true" />
-                            {t('common.create')}
-                        </Link>
-                    </Button>
+                    {canManage && (
+                        <Button asChild>
+                            <Link href="/currencies/create">
+                                <Plus className="size-4" aria-hidden="true" />
+                                {t('common.create')}
+                            </Link>
+                        </Button>
+                    )}
                 </div>
 
                 {/* Wide content scrolls inside its own container so the page body never
@@ -124,12 +129,14 @@ export default function CurrenciesIndex({ currencies }: { currencies: CurrencyRo
                                         )}
                                     </td>
                                     <td className="px-4 py-3 text-end">
-                                        <Button variant="ghost" size="sm" asChild>
-                                            <Link href={`/currencies/${currency.id}/edit`}>
-                                                <Pencil className="size-4" aria-hidden="true" />
-                                                {t('common.edit')}
-                                            </Link>
-                                        </Button>
+                                        {canManage && (
+                                            <Button variant="ghost" size="sm" asChild>
+                                                <Link href={`/currencies/${currency.id}/edit`}>
+                                                    <Pencil className="size-4" aria-hidden="true" />
+                                                    {t('common.edit')}
+                                                </Link>
+                                            </Button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Role;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -128,7 +129,10 @@ describe('fallback', function (): void {
     });
 
     it('translates validation messages into Arabic', function (): void {
-        $user = User::factory()->create(['locale' => 'ar']);
+        // Needs the permission to manage currencies, or authorization rejects the
+        // request before any validation message is produced.
+        $user = userWithRole(Role::Administrator);
+        $user->update(['locale' => 'ar']);
 
         $response = $this->actingAs($user)
             ->from('/currencies/create')

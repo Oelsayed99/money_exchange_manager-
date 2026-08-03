@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\Role;
+use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +47,27 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * A user holding a role, with roles and permissions seeded.
+ *
+ * RefreshDatabase truncates between tests, so the role table has to be rebuilt per
+ * test rather than once. Seeding from the same seeder the application ships means a
+ * test can never pass against a permission set that production does not have.
+ */
+function userWithRole(Role $role): User
 {
-    // ..
+    (new RolePermissionSeeder)->run();
+
+    $user = User::factory()->create();
+    $user->assignRole($role->value);
+
+    return $user;
+}
+
+/** A user holding no role at all, for asserting that access fails closed. */
+function userWithoutRole(): User
+{
+    (new RolePermissionSeeder)->run();
+
+    return User::factory()->create();
 }

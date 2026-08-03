@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Enums\Role;
 use App\Models\Currency;
-use App\Models\User;
 use Database\Seeders\CurrencySeeder;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
-    $this->user = User::factory()->create();
+    $this->user = userWithRole(Role::Administrator);
 });
 
 describe('access', function (): void {
