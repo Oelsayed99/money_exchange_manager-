@@ -59,6 +59,48 @@ describe('shared props', function (): void {
                 ->where('translations.currencies.title', 'العملات')
             );
     });
+
+    // The settings screens were shipped untranslated: the group existed on no page
+    // because it was never added to the client bundle.
+    it('ships the settings group in both languages', function (): void {
+        $this->actingAs(User::factory()->create())
+            ->get('/settings/profile')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('translations.settings.title', 'Settings')
+                ->where('translations.settings.nav.password', 'Password')
+                ->where('translations.settings.delete.button', 'Delete account')
+            );
+
+        $arabic = User::factory()->create(['locale' => 'ar']);
+
+        $this->actingAs($arabic)
+            ->get('/settings/profile')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('translations.settings.title', 'الإعدادات')
+                ->where('translations.settings.nav.password', 'كلمة المرور')
+                ->where('translations.settings.appearance.dark', 'داكن')
+                ->where('translations.settings.delete.button', 'حذف الحساب')
+            );
+    });
+
+    // Every key referenced by the settings screens must exist in both languages, or a
+    // user sees a raw dotted key where a label should be.
+    it('has no untranslated settings keys in Arabic', function (): void {
+        $english = trans('settings', [], 'en');
+        $arabic = trans('settings', [], 'ar');
+
+        $flatten = function (array $values, string $prefix = '') use (&$flatten): array {
+            $keys = [];
+            foreach ($values as $key => $value) {
+                $path = $prefix === '' ? (string) $key : $prefix.'.'.$key;
+                $keys = [...$keys, ...(is_array($value) ? $flatten($value, $path) : [$path])];
+            }
+
+            return $keys;
+        };
+
+        expect($flatten($arabic))->toBe($flatten($english));
+    });
 });
 
 describe('switching', function (): void {

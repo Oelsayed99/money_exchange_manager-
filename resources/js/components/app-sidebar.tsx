@@ -10,7 +10,7 @@ import { Coins, LayoutGrid } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
-    const { t } = useTranslations();
+    const { t, isRtl } = useTranslations();
     const { can } = usePermissions();
 
     // Built inside the component rather than at module scope so labels re-resolve when
@@ -35,7 +35,10 @@ export function AppSidebar() {
     ];
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        // A real RTL layout moves the sidebar to the right, not just the text inside it
+        // (Section 12). The primitive already carries direction-aware variants keyed on
+        // data-side; nothing was telling it which side to take.
+        <Sidebar collapsible="icon" variant="inset" side={isRtl ? 'right' : 'left'}>
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
