@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Domain\Audit\Auditable;
 use App\Domain\Money\CurrencySpec;
 use App\Domain\Money\Money;
 use Database\Factories\CurrencyFactory;
@@ -32,6 +33,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class Currency extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<CurrencyFactory> */
     use HasFactory;
 
