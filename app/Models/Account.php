@@ -12,6 +12,7 @@ use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property int $id
  * @property string $name
  * @property AccountType $type
+ * @property int|null $counterparty_id
  * @property string|null $owner
  * @property string|null $provider
  * @property string|null $identifier
@@ -47,6 +49,7 @@ final class Account extends Model
     protected $fillable = [
         'name',
         'type',
+        'counterparty_id',
         'owner',
         'provider',
         'identifier',
@@ -64,6 +67,19 @@ final class Account extends Model
             'is_active' => 'boolean',
             'sort_order' => 'integer',
         ];
+    }
+
+    /**
+     * The party this custody location belongs to, where it belongs to one.
+     *
+     * A credit/trust account, a customer balance and a partner's custody are each
+     * tied to somebody; a safe in the office is not.
+     *
+     * @return BelongsTo<Counterparty, $this>
+     */
+    public function counterparty(): BelongsTo
+    {
+        return $this->belongsTo(Counterparty::class);
     }
 
     /**
