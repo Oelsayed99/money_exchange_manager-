@@ -15,8 +15,17 @@
         --}}
         <script>
             (function () {
+                // The signed-in user's saved preference wins over this browser's:
+                // it is the choice that follows them between devices. For a guest
+                // there is nobody to have a preference, so localStorage is all there is.
+                var saved = @js(auth()->user()?->theme);
+
                 try {
-                    var appearance = localStorage.getItem('appearance') || 'system';
+                    if (saved) {
+                        localStorage.setItem('appearance', saved);
+                    }
+
+                    var appearance = saved || localStorage.getItem('appearance') || 'system';
                     var isDark = appearance === 'dark' || (appearance === 'system'
                         && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
