@@ -7,5 +7,6 @@ return [
     'currencies' => 'Currencies',
     'accounts' => 'Accounts',
     'counterparties' => 'Counterparties',
+    'exchange' => 'Exchange',
     'settings' => 'Settings',
 ];

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CurrencyController;
+use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +32,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('counterparties', CounterpartyController::class)
         ->except(['show', 'destroy']);
+
+    // The preview computes the margin without recording anything, on the server, using
+    // the same calculator that runs when the deal is stored.
+    Route::get('exchange', [ExchangeController::class, 'create'])->name('exchange.create');
+    Route::post('exchange/preview', [ExchangeController::class, 'preview'])->name('exchange.preview');
+    Route::post('exchange', [ExchangeController::class, 'store'])->name('exchange.store');
 });
 
 require __DIR__.'/settings.php';

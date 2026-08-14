@@ -30,7 +30,7 @@ class HandleInertiaRequests extends Middleware
      *
      * @var list<string>
      */
-    private const CLIENT_GROUPS = ['common', 'nav', 'currencies', 'settings', 'accounts', 'counterparties'];
+    private const CLIENT_GROUPS = ['common', 'nav', 'currencies', 'settings', 'accounts', 'counterparties', 'transactions'];
 
     /**
      * Determines the current asset version.

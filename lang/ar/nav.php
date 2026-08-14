@@ -7,5 +7,6 @@ return [
     'currencies' => 'العملات',
     'accounts' => 'الحسابات',
     'counterparties' => 'الأطراف',
+    'exchange' => 'صرف عملة',
     'settings' => 'الإعدادات',
 ];
