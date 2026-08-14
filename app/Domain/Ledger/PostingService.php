@@ -28,7 +28,100 @@ use Illuminate\Support\Facades\DB;
  */
 final class PostingService
 {
-    public function __construct(private readonly CurrencyRegistry $currencies) {}
+    public function __construct(
+        private readonly CurrencyRegistry $currencies,
+        private readonly PostingRules $rules,
+    ) {}
+
+    /**
+     * Prepare a transaction without committing it to the ledger.
+     *
+     * A draft has no entries at all (docs/posting-rules.md §5), so nothing it holds
+     * affects a balance and it can be discarded freely. The rules are run now and the
+     * result thrown away: an input that cannot produce a balanced posting should fail
+     * while somebody is still looking at it, not days later when it is committed.
+     *
+     * One consequence, accepted knowingly: running the rules resolves ledger accounts,
+     * so validating a draft creates the chart entries it *would* use. A discarded draft
+     * can therefore leave an account behind with no entries and a zero balance. That is
+     * a slight weakening of "the chart describes what actually happened", and it buys
+     * catching a malformed transaction at the moment it is entered, which is worth more.
+     */
+    public function draft(TransactionInput $input): Transaction
+    {
+        $this->assertBalanced($this->rules->build($input)->entries);
+
+        return Transaction::query()->create([
+            'type' => $input->type,
+            'status' => TransactionStatus::Draft,
+            'occurred_at' => $input->occurredAt,
+            'counterparty_id' => $input->counterparty?->getKey(),
+            'method' => $input->method,
+            'reference' => $input->reference,
+            'description' => $input->description,
+            'draft_payload' => $input->toPayload(),
+            'created_by' => Auth::id(),
+        ]);
+    }
+
+    /**
+     * Commit a draft to the ledger.
+     *
+     * Keeps the same transaction row, so anything already referring to the draft still
+     * refers to the same thing afterwards. The entries are built from the payload at
+     * this moment rather than when the draft was made, so a rate or an account changed
+     * in between is respected.
+     */
+    public function commit(Transaction $draft, TransactionStatus $status = TransactionStatus::Posted): Transaction
+    {
+        if (! $draft->isDraft()) {
+            throw InvalidPosting::notADraft($draft);
+        }
+
+        if ($status === TransactionStatus::Draft) {
+            throw InvalidPosting::cannotCommitToDraft();
+        }
+
+        $payload = $draft->draft_payload;
+
+        if ($payload === null) {
+            throw InvalidPosting::draftHasNoPayload($draft);
+        }
+
+        $request = $this->rules->build(TransactionInput::fromPayload($payload));
+
+        $this->assertBalanced($request->entries);
+
+        return DB::transaction(function () use ($draft, $request, $status): Transaction {
+            $draft->update([
+                'status' => $status,
+                'draft_payload' => null,
+                'posted_by' => $status === TransactionStatus::Posted ? Auth::id() : null,
+                'posted_at' => $status === TransactionStatus::Posted ? now() : null,
+            ]);
+
+            $this->writeLegs($draft, $request);
+            $entries = $this->writeEntries($draft, $request);
+            $this->applyToBalances($entries, $status);
+
+            return $draft->refresh();
+        });
+    }
+
+    /**
+     * Discard a draft.
+     *
+     * The only deletion the system permits, and only because a draft has never touched
+     * the ledger. Anything posted is corrected by a reversal, never removed.
+     */
+    public function discardDraft(Transaction $draft): void
+    {
+        if (! $draft->isDraft()) {
+            throw InvalidPosting::onlyDraftsCanBeDiscarded($draft);
+        }
+
+        $draft->delete();
+    }
 
     /**
      * Post a transaction and its entries.

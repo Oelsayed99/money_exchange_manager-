@@ -49,11 +49,19 @@ enum Role: string
                 Permission::ManageAccounts,
                 Permission::ViewCounterparties,
                 Permission::ManageCounterparties,
+                // An operator records and posts the day's work, and may discard their
+                // own unfinished drafts. Reversing something already in the ledger is
+                // a correction to history and stays with an administrator.
+                Permission::ViewTransactions,
+                Permission::RecordTransactions,
+                Permission::PostTransactions,
+                Permission::DeleteDraftTransactions,
             ],
             self::Viewer => [
                 Permission::ViewCurrencies,
                 Permission::ViewAccounts,
                 Permission::ViewCounterparties,
+                Permission::ViewTransactions,
             ],
         };
     }

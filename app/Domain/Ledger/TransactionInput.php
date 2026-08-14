@@ -54,6 +54,62 @@ final readonly class TransactionInput
         }
     }
 
+    /**
+     * Flatten to something a draft can hold until it is committed.
+     *
+     * Deliberately stores identifiers rather than serialised models: a draft may sit
+     * for days, and it should reflect the account as it is when posted, not a snapshot
+     * of how it looked when the draft was started.
+     *
+     * @return array<string, mixed>
+     */
+    public function toPayload(): array
+    {
+        return [
+            'type' => $this->type->value,
+            'currency_id' => $this->currency->getKey(),
+            'amount' => $this->amount->toStorageString(),
+            'occurred_at' => $this->occurredAt->format(DATE_ATOM),
+            'account_id' => $this->account?->getKey(),
+            'destination_account_id' => $this->destinationAccount?->getKey(),
+            'counterparty_id' => $this->counterparty?->getKey(),
+            'bucket' => $this->bucket?->value,
+            'method' => $this->method?->value,
+            'reference' => $this->reference,
+            'description' => $this->description,
+        ];
+    }
+
+    /**
+     * Rebuild an input from what a draft stored.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function fromPayload(array $payload): self
+    {
+        // Cast so the lookups return a single model: find() given an array returns a
+        // collection, which is not what any of these fields mean.
+        $currency = Currency::query()->findOrFail((int) $payload['currency_id']);
+
+        return new self(
+            type: TransactionType::from((string) $payload['type']),
+            currency: $currency,
+            amount: $currency->money((string) $payload['amount']),
+            occurredAt: new \DateTimeImmutable((string) $payload['occurred_at']),
+            account: isset($payload['account_id']) ? Account::query()->find((int) $payload['account_id']) : null,
+            destinationAccount: isset($payload['destination_account_id'])
+                ? Account::query()->find((int) $payload['destination_account_id'])
+                : null,
+            counterparty: isset($payload['counterparty_id'])
+                ? Counterparty::query()->find((int) $payload['counterparty_id'])
+                : null,
+            bucket: isset($payload['bucket']) ? BalanceBucket::from((string) $payload['bucket']) : null,
+            method: isset($payload['method']) ? MovementMethod::from((string) $payload['method']) : null,
+            reference: $payload['reference'] ?? null,
+            description: $payload['description'] ?? null,
+        );
+    }
+
     /** The custody location the money moved into or out of. */
     public function requireAccount(): Account
     {

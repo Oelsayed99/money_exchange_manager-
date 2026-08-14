@@ -29,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property MovementMethod|null $method
  * @property string|null $reference
  * @property string|null $description
+ * @property array<string, mixed>|null $draft_payload
  * @property string|null $idempotency_key
  * @property int|null $reversal_of_transaction_id
  * @property int|null $created_by
@@ -47,6 +48,7 @@ final class Transaction extends Model
         'method',
         'reference',
         'description',
+        'draft_payload',
         'idempotency_key',
         'reversal_of_transaction_id',
         'created_by',
@@ -61,6 +63,7 @@ final class Transaction extends Model
             'type' => TransactionType::class,
             'status' => TransactionStatus::class,
             'method' => MovementMethod::class,
+            'draft_payload' => 'array',
             'occurred_at' => 'datetime',
             'posted_at' => 'datetime',
         ];
@@ -102,6 +105,11 @@ final class Transaction extends Model
     public function reversedBy(): HasMany
     {
         return $this->hasMany(self::class, 'reversal_of_transaction_id');
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->status === TransactionStatus::Draft;
     }
 
     public function isReversal(): bool

@@ -28,6 +28,20 @@ enum Permission: string
     case ViewCounterparties = 'counterparties.view';
     case ManageCounterparties = 'counterparties.manage';
 
+    case ViewTransactions = 'transactions.view';
+
+    /** Prepare a transaction, without committing it to the ledger. */
+    case RecordTransactions = 'transactions.record';
+
+    /** Commit a prepared transaction, which is the point of no return. */
+    case PostTransactions = 'transactions.post';
+
+    /** Reverse something already posted. Never a deletion. */
+    case ReverseTransactions = 'transactions.reverse';
+
+    /** Discard a draft. Only ever a draft — nothing posted can be deleted. */
+    case DeleteDraftTransactions = 'transactions.delete_draft';
+
     /** @return list<string> */
     public static function values(): array
     {
