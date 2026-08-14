@@ -1,6 +1,6 @@
 # Posting Rules
 
-**Status:** Draft for review. No ledger code exists yet.
+**Status:** Agreed. The four open questions were resolved on 2026-08-14; see §9.
 **Date:** 2026-08-14
 **Required by:** Section 7 — "Before implementing this section, define and document: the posting rules for every transaction type; which ledger accounts or balance buckets each transaction affects; how reversals work; how pending and partially settled transactions affect available and confirmed balances; how concurrency is controlled; how cached balances are reconciled with ledger totals."
 
@@ -93,7 +93,7 @@ DR  capital · CUR
 CR  cash · account · CUR
 ```
 
-> **Assumption, flagged.** Section 6 lists Deposit and Withdrawal separately from "money received from a party" and from "transfer between my accounts", which leaves capital in/out as the only distinct meaning. Note that in the sample statement `ايداع` (deposit) is used as a *receive method* — how the money arrived — not as this transaction type. See Question 1.
+> **Decided (Q1).** Both meanings are real and are modelled separately. Types 2 and 3 are owner capital going in and out. Separately, **every cash movement carries a `method`** recording how the money physically moved — the `ايداع` / `تحويل` / `كاش` seen in the statement. Method is a field, not a type; the same deposit method can apply to a credit deposit, a receivable settlement or a capital injection, and duplicating types per method would multiply nineteen into sixty.
 
 **4. Transfer between my accounts** — same currency only.
 ```
@@ -184,9 +184,9 @@ CR  fx_position · A             value applied
 DR  fx_position · B             amount delivered
 CR  cash · account · B          amount delivered
 ```
-Plus profit recognition exactly as in type 11, if a spread applies. **Whether it does is Question 2 — this is the one rule I cannot settle alone.**
+Plus profit recognition exactly as in type 11. **Decided (Q2): a cross-currency credit settlement recognises ordinary trading profit**, identical to an exchange spread — economically it is one, and it belongs in the same margin figure.
 
-Partial settlement is simply a smaller amount. Every settlement references the deposit(s) it pays down, via `credit_settlements` — see Question 3 for how that is chosen.
+Partial settlement is simply a smaller amount. Every settlement references the deposit(s) it pays down via `credit_settlements`, allocated **oldest deposit first (FIFO)** — decided (Q3). FIFO is what makes credit aging meaningful: "this money has been held eighteen days" is only answerable if settlements consume the oldest tranche first.
 
 ### Income, cost and correction
 
@@ -297,18 +297,26 @@ leaving `fx_position · EGP` at 2,560,000 against `fx_position · USD` of 50,000
 
 ---
 
-## 9. Questions I cannot settle alone
+## 9. Decisions
 
-These four block implementation of the types they touch. Everything else in this document I am confident enough to build.
+The four open questions were resolved on 2026-08-14.
 
-**Q1 — What are Deposit and Withdrawal for?**
-I have defined them as owner capital in and out, because that is the only meaning Section 6 leaves once transfers and party movements have their own types. But your statement uses `ايداع` as a *receive method* — how money arrived — alongside `تحويل` (transfer) and `كاش` (cash). If that is the real meaning, method belongs as a field on the transaction and types 2 and 3 mean something else entirely. **Also: is that the complete list of methods, or are there others?**
+**Q1 — Deposit and Withdrawal, and the receive method. Both.**
+Types 2 and 3 mean owner capital in and out. Independently, every cash movement records a **method**: `transfer` (تحويل), `deposit` (ايداع), `cash` (كاش), plus `other`. The list is data-extensible in the same way currencies are — adding one is not a code change. Method is deliberately a field rather than a type, because it is orthogonal to intent: money can arrive by transfer as a credit deposit, as a receivable settlement, or as capital.
 
-**Q2 — Does a cross-currency credit settlement produce profit?**
-Salem hands over EGP; USD goes back at 51.48. If your cost of that USD was 51.20, the 14,000 EGP difference is real money. Three options: (a) recognise it as ordinary trading profit — my assumption in §8 above; (b) post it to a separate FX gain/loss account, keeping it out of trading margin; (c) settle at the deposit-date rate so no gain arises. This changes the entries, so it must be settled before type 13 is built.
+**Q2 — A cross-currency credit settlement recognises ordinary trading profit.**
+Repaying in a different currency at a rate that differs from cost produces real margin, and it is the same kind of margin as an exchange. It posts to `trading_profit` and appears in the same profit reports. No separate FX gain/loss account.
 
-**Q3 — Which deposit does a partial settlement pay down?**
-Salem made nine deposits before the first delivery. When 2,574,000 EGP is settled, does it clear the oldest deposits first (FIFO), or should the operator choose? FIFO is the usual default and is what makes a credit-aging report meaningful. Manual allocation is more faithful if your deals are actually negotiated per-tranche.
+**Q3 — Partial settlements allocate FIFO, oldest deposit first.**
+Automatic, and it is what makes credit aging answerable. Manual allocation is not built; if a specific tranche ever needs to be settled at a specific agreed rate, that is a change request rather than something to guess at now.
 
-**Q4 — Can a credit balance go negative?**
-Section 19 says "unless explicitly allowed". My assumption is no by default, overridable per account by a permissioned user — delivering more than was deposited is usually a mistake worth blocking, but occasionally a deliberate advance.
+**Q4 — A credit balance may go negative. Always allowed.**
+Recorded as the owner's decision, against the recommendation to block by default. Section 19 permits it: "unless explicitly allowed", and it is explicitly allowed.
+
+The consequence, stated once and then accepted: over-delivery — sending out more than was ever deposited — is a plausible data-entry error, and nothing will stop it. To keep some of that value without contradicting the decision, a settlement that would take a balance below zero raises a **non-blocking warning**: the operator is told, and may proceed. Nothing is ever refused on these grounds.
+
+---
+
+## 10. Ready to build
+
+With those settled, every posting rule in this document is implementable. Phase 3.2 begins with the chart of accounts and the ledger schema; the posting service follows, then the transaction types in the order they are numbered above.
