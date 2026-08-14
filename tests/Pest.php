@@ -3,6 +3,7 @@
 use App\Enums\Role;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -20,6 +21,12 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+// Integration tests commit their data, because they need a second connection to see
+// it. Truncation rather than a rolled-back transaction is what makes that possible.
+pest()->extend(TestCase::class)
+    ->use(DatabaseTruncation::class)
+    ->in('Integration');
 
 /*
 |--------------------------------------------------------------------------

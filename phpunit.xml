@@ -11,6 +11,14 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!--
+            Tests that need real, committed data visible to a second connection.
+            RefreshDatabase holds an open transaction, which hides everything from any
+            other connection, so live locking cannot be observed under it.
+        -->
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
