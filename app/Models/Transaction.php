@@ -6,6 +6,9 @@ namespace App\Models;
 
 use App\Domain\Audit\Auditable;
 use App\Enums\MovementMethod;
+use App\Enums\ProfitMethod;
+use App\Enums\ProfitStatus;
+use App\Enums\SpreadType;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
 use Illuminate\Database\Eloquent\Model;
@@ -27,6 +30,14 @@ use Illuminate\Support\Carbon;
  * @property Carbon $occurred_at
  * @property int|null $counterparty_id
  * @property MovementMethod|null $method
+ * @property ProfitMethod|null $profit_method
+ * @property ProfitStatus|null $profit_status
+ * @property int|null $profit_currency_id
+ * @property string|null $customer_rate
+ * @property string|null $cost_rate
+ * @property SpreadType|null $spread_type
+ * @property string|null $gross_profit
+ * @property string|null $net_profit
  * @property string|null $reference
  * @property string|null $description
  * @property array<string, mixed>|null $draft_payload
@@ -49,6 +60,20 @@ final class Transaction extends Model
         'reference',
         'description',
         'draft_payload',
+        'profit_method',
+        'profit_status',
+        'profit_currency_id',
+        'customer_rate',
+        'cost_rate',
+        'spread_type',
+        'spread_value',
+        'customer_value',
+        'cost_value',
+        'gross_profit',
+        'fees_charged',
+        'expenses_amount',
+        'commissions_amount',
+        'net_profit',
         'idempotency_key',
         'reversal_of_transaction_id',
         'created_by',
@@ -63,6 +88,9 @@ final class Transaction extends Model
             'type' => TransactionType::class,
             'status' => TransactionStatus::class,
             'method' => MovementMethod::class,
+            'profit_method' => ProfitMethod::class,
+            'profit_status' => ProfitStatus::class,
+            'spread_type' => SpreadType::class,
             'draft_payload' => 'array',
             'occurred_at' => 'datetime',
             'posted_at' => 'datetime',

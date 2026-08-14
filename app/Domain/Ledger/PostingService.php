@@ -259,6 +259,7 @@ final class PostingService
             'created_by' => Auth::id(),
             'posted_by' => $posted ? Auth::id() : null,
             'posted_at' => $posted ? now() : null,
+            ...$request->attributes,
         ]);
     }
 

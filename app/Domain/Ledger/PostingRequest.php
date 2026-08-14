@@ -35,6 +35,14 @@ final readonly class PostingRequest
         public ?string $idempotencyKey = null,
         public TransactionStatus $status = TransactionStatus::Posted,
         public ?int $reversalOf = null,
+        /**
+         * Extra columns to write with the transaction — the profit figures of an
+         * exchange, for instance. Written at creation rather than updated afterwards,
+         * so the audit trail shows one event instead of a create and an edit.
+         *
+         * @var array<string, mixed>
+         */
+        public array $attributes = [],
     ) {}
 
     public function withEntries(EntryDraft ...$entries): self
@@ -51,6 +59,7 @@ final readonly class PostingRequest
             $this->idempotencyKey,
             $this->status,
             $this->reversalOf,
+            $this->attributes,
         );
     }
 }
