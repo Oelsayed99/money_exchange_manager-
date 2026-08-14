@@ -22,6 +22,12 @@ enum Permission: string
     case ViewCurrencies = 'currencies.view';
     case ManageCurrencies = 'currencies.manage';
 
+    case ViewAccounts = 'accounts.view';
+    case ManageAccounts = 'accounts.manage';
+
+    case ViewCounterparties = 'counterparties.view';
+    case ManageCounterparties = 'counterparties.manage';
+
     /** @return list<string> */
     public static function values(): array
     {

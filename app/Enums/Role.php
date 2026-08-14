@@ -41,8 +41,20 @@ enum Role: string
     {
         return match ($this) {
             self::Administrator => Permission::cases(),
-            self::Operator => [Permission::ViewCurrencies],
-            self::Viewer => [Permission::ViewCurrencies],
+            // An operator works with parties and locations daily but does not get to
+            // redefine what money means, so reference data stays read-only.
+            self::Operator => [
+                Permission::ViewCurrencies,
+                Permission::ViewAccounts,
+                Permission::ManageAccounts,
+                Permission::ViewCounterparties,
+                Permission::ManageCounterparties,
+            ],
+            self::Viewer => [
+                Permission::ViewCurrencies,
+                Permission::ViewAccounts,
+                Permission::ViewCounterparties,
+            ],
         };
     }
 }

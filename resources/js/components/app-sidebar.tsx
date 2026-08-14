@@ -6,7 +6,7 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Coins, LayoutGrid } from 'lucide-react';
+import { Coins, Landmark, LayoutGrid, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
@@ -23,15 +23,9 @@ export function AppSidebar() {
         },
         // Navigation reflects permissions so a user is not sent to a page that will
         // refuse them. The route is guarded regardless.
-        ...(can('currencies.view')
-            ? [
-                  {
-                      title: t('nav.currencies'),
-                      url: '/currencies',
-                      icon: Coins,
-                  },
-              ]
-            : []),
+        ...(can('accounts.view') ? [{ title: t('nav.accounts'), url: '/accounts', icon: Landmark }] : []),
+        ...(can('counterparties.view') ? [{ title: t('nav.counterparties'), url: '/counterparties', icon: Users }] : []),
+        ...(can('currencies.view') ? [{ title: t('nav.currencies'), url: '/currencies', icon: Coins }] : []),
     ];
 
     return (

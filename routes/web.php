@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +22,14 @@ Route::middleware(['auth'])->group(function () {
     // No destroy: currencies are referenced by ledger history and are deactivated,
     // never deleted. See CurrencyController.
     Route::resource('currencies', CurrencyController::class)
+        ->except(['show', 'destroy']);
+
+    // Same reasoning: both are referenced by history that must stay reproducible, so
+    // they are deactivated rather than deleted.
+    Route::resource('accounts', AccountController::class)
+        ->except(['show', 'destroy']);
+
+    Route::resource('counterparties', CounterpartyController::class)
         ->except(['show', 'destroy']);
 });
 

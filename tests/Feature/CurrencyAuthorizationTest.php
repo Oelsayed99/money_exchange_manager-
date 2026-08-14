@@ -144,12 +144,21 @@ describe('managing currencies', function (): void {
 });
 
 describe('shared permissions', function (): void {
+    // Derived from the role rather than a hardcoded list: the property under test is
+    // "exactly what this role grants, and nothing more", which must keep holding as
+    // permissions are added.
     it('sends only the permissions the user holds', function (): void {
         $props = $this->actingAs(userWithRole(Role::Operator))
             ->get('/dashboard')
             ->viewData('page')['props'];
 
-        expect($props['auth']['permissions'])->toBe([Permission::ViewCurrencies->value]);
+        $granted = array_map(
+            static fn (Permission $permission): string => $permission->value,
+            Role::Operator->permissions(),
+        );
+
+        expect($props['auth']['permissions'])->toBe($granted)
+            ->and($props['auth']['permissions'])->not->toContain(Permission::ManageCurrencies->value);
     });
 
     it('sends an administrator every permission', function (): void {
