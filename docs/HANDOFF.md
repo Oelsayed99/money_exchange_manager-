@@ -1,0 +1,150 @@
+# Project Handoff
+
+**Written:** 2026-08-16 · **At commit:** `d3e86f0` · **Local and remote in sync.**
+
+---
+
+## 1. What is being built
+
+A multi-currency financial management application for a money-exchange business: currency exchanges, credit/trust holdings, transfers between custody locations, counterparty balances, profit tracking, and reporting — in English and Arabic with full RTL.
+
+**Repository:** `/Users/omarelsayed/Finance` → `git@github.com:Oelsayed99/money_exchange_manager-.git` (private; note the trailing hyphen in the name — legal but likely a slip, renaming was offered and not taken up).
+
+**Authoritative specification:** supplied by the owner across two messages, 24 sections. Not stored in the repo. `docs/ASSESSMENT.md` is the Section 24 assessment derived from it; `docs/posting-rules.md` is the agreed Section 7 design.
+
+**Real-world input:** the owner supplied a screenshot of the spreadsheet this replaces — a per-counterparty EGP statement for سالم التجريبي. It drives several tests. Key figures: nine credit deposits totalling **3,957,540**; a settlement of **2,574,000** leaving **1,383,540**; deliveries at rates 51.48, 51.48, 51.48, 50.8. Its single signed running-balance column flips between `(899,510)` and `50,490` — the exact problem the four-bucket model solves.
+
+---
+
+## 2. Stack (final, not to be reopened)
+
+Laravel 12.64 · PHP 8.5.7 · MySQL 9.6 · React 19 + Inertia 2 · TypeScript strict · Tailwind 4 · shadcn/ui · Recharts (installed, unused) · Pest · Vitest + RTL · Playwright (configured, **no browsers installed, zero e2e tests**) · spatie/laravel-permission · Larastan level 8.
+
+Recorded in `docs/adr/0001-frontend-architecture.md`. An earlier Livewire choice was superseded once Section 16 arrived.
+
+---
+
+## 3. Architecture — the load-bearing decisions
+
+### Money
+- Decimal strings over **bcmath**, never floats. `DECIMAL(28,10)` amounts, rates to 12 dp.
+- **Nothing rounds.** Removed on owner instruction. `Decimal::round()` no longer exists. Addition, subtraction and multiplication are exact; multiplication **throws** `PrecisionLoss` rather than discard a digit. Division **truncates** (mathematically unavoidable) and never rounds.
+- Display pads to the currency's precision, never cuts: USD `1000` → `1000.00`, but `1000.123456` stays in full.
+- Money crosses every boundary as a **string** (risk R1). JS `number` is float64.
+- `Money` carries no conversion. Cross-currency add/subtract/compare throws `CurrencyMismatch`; `equals()` returns false instead.
+
+### The ledger
+- **Per-currency balancing, no base currency.** Every transaction balances independently within each currency it touches, checkable with **no exchange rate involved** — which is why a posted transaction cannot drift when rates move.
+- Exchanges join currencies through **`fx_position` clearing accounts**. Once profit is recognised these net to zero when valued at cost — a standing correctness check, tested.
+- Entries are **append-only**, enforced by MySQL triggers *and* the model. Corrections are reversals, never edits.
+- Balances are **derived**; `ledger_balances` is a rebuildable cache. `ledger:rebuild` / `ledger:verify`.
+- `PostingService` is the only writer. Locks in ascending ledger-account id order; idempotency keys; wrapped in a DB transaction.
+- **Available balance excludes pending inflows.** Promised money is not spendable.
+- A **reversed** transaction keeps its entries and keeps counting; the reversing entries cancel it. Removing it too would cancel twice.
+
+### Counterparties — Section 5
+Four independent buckets per party per currency, never netted: `custody` / `receivable` (assets), `payable` / `credit_trust` (liabilities). Custody and credit_trust are mirrors. Keyed uniquely on (counterparty, bucket, currency) so **there is nowhere to put a combined figure**. Negative positions refused with a message naming the mirror bucket.
+
+### Audit
+Append-only `audit_logs`, DB triggers, actor stored twice (`user_id` **without** FK, plus `actor_label` snapshot) so the trail outlives the user. Secrets **redacted not omitted** — a password change is recorded, its value is not. Account identifiers likewise.
+
+### Owner decisions on the four open questions (recorded in posting-rules §9)
+1. **Both** a `method` field (تحويل/ايداع/كاش/cheque/other) **and** Deposit/Withdrawal meaning owner capital.
+2. Cross-currency credit settlement recognises **ordinary trading profit**.
+3. Partial settlements allocate **FIFO**.
+4. Credit balances **may go negative — always allowed** (against recommendation; owner's call). A non-blocking warning is retained. *Note: the warning is designed but **not yet implemented** — no credit settlement UI exists.*
+
+---
+
+## 4. Things tried that failed, and why
+
+Recorded so they are not retried:
+
+| Attempt | Why it failed |
+|---|---|
+| `--env=testing` to target the test DB | No `.env.testing` exists; it silently used the default env and **wiped the dev database twice**. Correct form: `DB_DATABASE=finance_test php artisan …` |
+| Concurrency test under `RefreshDatabase` | Holds an open transaction, so a second connection sees nothing. Blocked 50s then failed. Moved to `tests/Integration` with `DatabaseTruncation`. |
+| `app()->runningInConsole()` to detect console vs HTTP | **True under PHPUnit.** Cannot distinguish an artisan command from a test request. |
+| `REQUEST_URI` as the same signal | Populated (`/`) even in a test making no request. |
+| → resolved | `request()->route() !== null` is the honest signal. |
+| Chained `expectsOutputToContain` | Reported a string missing that dumping proved present. Replaced with `Artisan::call()` + `Artisan::output()`. |
+| `toThrow(Throwable::class)` | Pest uses `class_exists()`; `Throwable` is an **interface**, so it was treated as a message substring and asserted nothing. |
+| `MoneyCast` with `attach()` | Eloquent casts extra pivot attributes **in isolation**, before foreign keys merge, so `currency_id` is unavailable. Cast now accepts a plain decimal there and **refuses a `Money`**; `Account::setOpeningBalance()` is the sanctioned path. |
+| `interface` for Inertia `useForm` types | Needs an implicit index signature — use `type` aliases. |
+| `??` in a test helper for "explicitly null" | Cannot express it; use `array_key_exists`. |
+| Physical CSS (`ml-auto`) with RTL | Broke the login layout. Logical properties only, enforced by an ESLint rule (vendored `components/ui/**` exempted as known debt). |
+| React-effect theme application | Runs after first paint → flash. Must be a blocking script in the Blade head. |
+
+---
+
+## 5. Current status
+
+**Phases 1, 2 and 3 complete. Phase 4 is one item short.**
+
+| Phase | State |
+|---|---|
+| 1 Foundation | ✅ auth, roles/permissions, currencies, precision, locale+theme prefs, shared UI, audit |
+| 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
+| 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
+| 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen · ❌ **profit authorization** |
+| 5 Dashboard & reports | ❌ not started |
+| 6 Export & reconciliation | ❌ not started |
+| 7 Quality & release | ❌ not started |
+
+**Tests: 540 backend (1,255 assertions) + 24 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+
+**Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
+
+---
+
+## 6. Known gaps, debt and blockers
+
+**No blockers.** One open question (below). Debt:
+
+- **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care.
+- **`om.he.els@gmail.com` no longer exists** — destroyed by my `migrate:fresh`. Only `test@example.com` (administrator) remains.
+- **Playwright**: configured, no browsers, no e2e tests.
+- **PHPStan baseline holds 20 inherited errors** from the starter kit. Burn down in Phase 7.
+- **Vendored `components/ui/**` still uses physical CSS properties** — RTL debt, exempted from lint.
+- **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
+- **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
+- **No transaction list/statement screen.** The ledger is invisible in the UI.
+- **Drafts have no UI.** Service-level only.
+- **Validating a draft creates ledger accounts** it would use — documented trade-off, leaves empty accounts if discarded.
+- **Auth pages still hardcoded English** (they lay out correctly in RTL).
+- Owner edits on GitHub web UI have caused divergence once; resolved by rebase, not force-push.
+
+---
+
+## 7. Configuration assumptions (no secrets)
+
+- `.env` is gitignored and verified absent from the pushed tree. `APP_KEY` exists locally only.
+- `DB_CONNECTION=mysql`, `DB_DATABASE=finance`, `DB_USERNAME=root`, empty password, `utf8mb4` / `utf8mb4_0900_ai_ci`.
+- Test DB `finance_test`, configured in `phpunit.xml`. **Tests run against MySQL, never SQLite** (ADR 0002).
+- Dev server: `php artisan serve --port=8090`. **Ports 8000, 8001, 8080, 8085 belong to the owner's other projects — do not touch.**
+- Login for testing: `test@example.com` / `password`.
+- Git: SSH already authenticated as `Oelsayed99`. Commit email corrected to `oelsayed314@gmail.com` (was `gmaill.com`, a typo — the owner's three other repos still carry it in history).
+- `gh` CLI is **not** installed.
+- Owner runs macOS; `brew`-installed MySQL; no Docker.
+
+---
+
+## 8. Working agreement
+
+- Section 22 workflow per step: state goal → list files → explain decisions → one coherent feature → tests → format/static analysis → run tests → **report real pass/fail** → update docs → stop.
+- Never claim a command ran unless it did.
+- Owner reviews at step boundaries and says "continue"; commit + push when asked (they have asked at every step so far).
+- Every ADR-worthy decision goes in `docs/adr/`.
+- Bilingual from the first commit of any screen — never retrofitted.
+
+---
+
+## 9. Exact next steps
+
+1. **Resolve the open question, then finish Phase 4.** Asked and unanswered: what does §23's *"profit authorization"* mean?
+   - (a) a permission gating **who may see profit** — overlaps §9's profit-hidden reports; or
+   - (b) **approval required to record a deal outside normal margin** — a maker-checker step for a loss or an unusually thin spread.
+   These are very different builds. Do not guess.
+2. **Phase 5 — Dashboard and reports.** Cards, filters, tables, Recharts visualisations, saved presets, internal profit reports, **profit-hidden external reports**, customer and account statements. The counterparty statement is the direct replacement for the owner's spreadsheet and should be built against that screenshot.
+   - Hidden-profit must be enforced at the **query and serialization layers**, never a React conditional — Inertia serialises props into the document.
+3. Likely worth pulling forward: a **transaction list screen**, since the ledger is currently invisible in the UI.
