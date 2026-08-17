@@ -54,6 +54,15 @@ Append-only `audit_logs`, DB triggers, actor stored twice (`user_id` **without**
 3. Partial settlements allocate **FIFO**.
 4. Credit balances **may go negative — always allowed** (against recommendation; owner's call). A non-blocking warning is retained. *Note: the warning is designed but **not yet implemented** — no credit settlement UI exists.*
 
+### Owner decisions on profit visibility (2026-08-18)
+
+Asked because §23's "profit authorization" was ambiguous and was the last item blocking Phase 4.
+
+5. **"Me mode" / "client mode" is a toggle the owner flips**, not a permission. Anyone who can open a counterparty can switch to me-mode and see profit. The toggle decides which version prints.
+6. **§23 "profit authorization" means nothing beyond that.** No maker-checker, no approval queue, no approver role. **Phase 4 is closed.**
+
+Even so, hidden-profit is enforced at the **query** layer, not by a React conditional: Inertia serialises props into the document, so a figure hidden in the component is still in the page source and in the PDF's source data. The split also means a `profit.view` permission, if ever wanted, is a small change rather than a rewrite.
+
 ---
 
 ## 4. Things tried that failed, and why
@@ -86,12 +95,12 @@ Recorded so they are not retried:
 | 1 Foundation | ✅ auth, roles/permissions, currencies, precision, locale+theme prefs, shared UI, audit |
 | 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
-| 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen · ❌ **profit authorization** |
-| 5 Dashboard & reports | ❌ not started |
+| 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
+| 5 Dashboard & reports | 🚧 5.1 rate-driven deal entry done; statement, PDF and dashboard outstanding |
 | 6 Export & reconciliation | ❌ not started |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 540 backend (1,255 assertions) + 24 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 581 backend (1,346 assertions) + 35 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -101,7 +110,7 @@ Recorded so they are not retried:
 
 **No blockers.** One open question (below). Debt:
 
-- **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care.
+- **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care. Numbering resumes at 0008 and is correct from there.
 - **`om.he.els@gmail.com` no longer exists** — destroyed by my `migrate:fresh`. Only `test@example.com` (administrator) remains.
 - **Playwright**: configured, no browsers, no e2e tests.
 - **PHPStan baseline holds 20 inherited errors** from the starter kit. Burn down in Phase 7.
@@ -141,10 +150,13 @@ Recorded so they are not retried:
 
 ## 9. Exact next steps
 
-1. **Resolve the open question, then finish Phase 4.** Asked and unanswered: what does §23's *"profit authorization"* mean?
-   - (a) a permission gating **who may see profit** — overlaps §9's profit-hidden reports; or
-   - (b) **approval required to record a deal outside normal margin** — a maker-checker step for a loss or an unusually thin spread.
-   These are very different builds. Do not guess.
-2. **Phase 5 — Dashboard and reports.** Cards, filters, tables, Recharts visualisations, saved presets, internal profit reports, **profit-hidden external reports**, customer and account statements. The counterparty statement is the direct replacement for the owner's spreadsheet and should be built against that screenshot.
-   - Hidden-profit must be enforced at the **query and serialization layers**, never a React conditional — Inertia serialises props into the document.
-3. Likely worth pulling forward: a **transaction list screen**, since the ledger is currently invisible in the UI.
+The owner restated the product in their own words on 2026-08-18, and it maps to four pieces of work. The first is done; the rest are in order.
+
+1. ✅ **Rate-driven deal entry.** Type one amount plus the rate, get the other. See ADR 0008.
+2. **The client statement** — the direct replacement for the spreadsheet. One counterparty, **a tab per currency** (in/out/position only means something inside one currency; the sheet was EGP-only), columns for in, out and the running position. Plus an all-currencies summary that lists positions side by side and never adds them up.
+   - **No signed difference column.** The sheet flips between `(899,510)` and `50,490` and the sign carries the whole meaning. Label it — *"Client credit 1,383,540 EGP"* / *"Owed to us 899,510 EGP"* — because a parenthesis is the easiest thing to misread on a page handed to a client. This is what the four buckets were built for.
+   - **Me mode / client mode** toggle, per the owner decisions above.
+3. **PDF of that statement, in either mode.** Header states Internal copy or Client copy. The client version is generated from a query that never selects the profit columns, so there is no profit in the file to leak.
+4. **Dashboard** — filters by client, period, currency and status. Status is **per currency**: *they owe me* / *they have credit* / *closed* (all buckets zero). A client owing in USD while holding credit in EGP shows as **mixed** at client level and resolves when a currency is chosen.
+
+Still worth pulling forward at some point: a **transaction list screen**, since the ledger has no UI of its own. The client statement covers most of the need.

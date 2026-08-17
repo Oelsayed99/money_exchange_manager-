@@ -9,6 +9,8 @@ interface MoneyInputProps {
     currency?: string;
     className?: string;
     disabled?: boolean;
+    /** For inputs whose meaning comes from surrounding text rather than a <label>. */
+    'aria-label'?: string;
 }
 
 /**
@@ -20,7 +22,7 @@ interface MoneyInputProps {
  * decimal point and a leading minus, and the value stays a string from the keyboard
  * to the database column.
  */
-export function MoneyInput({ id, value, onChange, currency, className, disabled }: MoneyInputProps) {
+export function MoneyInput({ id, value, onChange, currency, className, disabled, 'aria-label': ariaLabel }: MoneyInputProps) {
     const handle = (raw: string) => {
         // Arabic-Indic digits are normalised so an Arabic keyboard produces a value the
         // decimal parser accepts.
@@ -45,6 +47,7 @@ export function MoneyInput({ id, value, onChange, currency, className, disabled 
             <Input
                 id={id}
                 type="text"
+                aria-label={ariaLabel}
                 inputMode="decimal"
                 autoComplete="off"
                 dir="ltr"

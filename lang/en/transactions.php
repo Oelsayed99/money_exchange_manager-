@@ -29,6 +29,27 @@ return [
         'record' => 'Record exchange',
         'recorded' => 'Exchange recorded.',
         'no_counterparty' => 'No counterparty',
+
+        // Entering a deal the way it was negotiated: a direction, a rate, one amount.
+        'direction' => 'This deal',
+        'currency' => 'Currency',
+        'buying' => 'I am buying',
+        'selling' => 'I am selling',
+        'buying_hint' => 'Currency comes to you; you pay in the other one.',
+        'selling_hint' => 'Currency leaves you; you are paid in the other one.',
+        'paying_in' => 'Paying in',
+        'paid_in' => 'Paid in',
+        'rate' => 'Rate',
+        'rate_reads' => '1 :base = :rate :quote',
+        'swap_rate' => 'State the rate the other way round',
+        'computed' => 'Worked out for you',
+        'computed_hint' => 'Type over it with the figure you actually settled at.',
+        'inexact' => 'This figure does not divide evenly and has been cut, not rounded. Enter the amount you actually settled at.',
+        'effective_rate' => 'Effective rate',
+        'effective_rate_hint' => 'What the two amounts actually work out to. This is the rate that gets recorded.',
+        'solve_needs_two' => 'Give exactly two of the rate, the amount in and the amount out; the third is worked out from them.',
+        'rate_positive' => 'A rate must be greater than zero.',
+        'rate_needs_amount' => 'A rate cannot be worked out from a zero amount.',
     ],
 
     'preview' => [

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Domain\Exchange\ExchangeService;
+use App\Domain\Exchange\RateQuote;
+use App\Domain\Money\Decimal;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
 use App\Enums\SpreadType;
 use App\Http\Requests\ExchangeRequest;
+use App\Http\Requests\RateConversionRequest;
 use App\Models\Account;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -45,6 +48,55 @@ final class ExchangeController extends Controller
         $breakdown = $this->exchange->preview($request->toExchangeInput());
 
         return response()->json($breakdown->jsonSerialize());
+    }
+
+    /**
+     * Solve a rate against two amounts, so the operator can type the two they know.
+     *
+     * An operator says "I am buying 100,000 USD at 3.67 to the dirham" and expects to be
+     * told the dirham figure; the ledger, meanwhile, wants both amounts as facts and
+     * derives the rate from them. Both are right, at different moments. This bridges
+     * them, on the server, where the arithmetic is exact — the same reason the profit
+     * preview is computed here rather than in the component.
+     */
+    public function convert(RateConversionRequest $request): JsonResponse
+    {
+        $baseCurrency = $request->baseCurrency();
+        $quoteCurrency = $request->quoteCurrency();
+        $solvedFor = $request->solvingFor();
+
+        if ($solvedFor === 'rate') {
+            $baseAmount = $baseCurrency->money($request->decimal('base_amount'));
+            $quoteAmount = $quoteCurrency->money($request->decimal('quote_amount'));
+
+            $quote = RateQuote::between($baseAmount, $quoteAmount);
+            $exact = RateQuote::betweenIsExact($baseAmount, $quoteAmount);
+        } else {
+            $quote = RateQuote::of($baseCurrency->spec(), $quoteCurrency->spec(), $request->decimal('rate'));
+
+            if ($solvedFor === 'quote_amount') {
+                $baseAmount = $baseCurrency->money($request->decimal('base_amount'));
+                $conversion = $quote->convert($baseAmount);
+                $quoteAmount = $conversion->amount;
+            } else {
+                $quoteAmount = $quoteCurrency->money($request->decimal('quote_amount'));
+                $conversion = $quote->convert($quoteAmount);
+                $baseAmount = $conversion->amount;
+            }
+
+            $exact = $conversion->exact;
+        }
+
+        return response()->json([
+            'solved_for' => $solvedFor,
+            // Always at rate precision, whether it was typed or derived, so the caller
+            // is not left comparing "51.48" against "51.480000000000" and finding them
+            // different. Trimming it for display is the interface's business.
+            'rate' => Decimal::padTo($quote->rate, RateQuote::SCALE),
+            'base_amount' => $baseAmount->jsonSerialize(),
+            'quote_amount' => $quoteAmount->jsonSerialize(),
+            'exact' => $exact,
+        ]);
     }
 
     public function store(ExchangeRequest $request): RedirectResponse

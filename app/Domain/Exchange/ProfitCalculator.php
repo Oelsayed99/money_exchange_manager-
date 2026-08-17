@@ -229,6 +229,12 @@ final class ProfitCalculator
         return Money::of(Decimal::truncateTo($product, Money::SCALE), $input->profitCurrency()->spec());
     }
 
-    /** Rates are held to twelve decimal places, well beyond any quoted market rate. */
-    public const int RATE_SCALE = 12;
+    /**
+     * Rates are held to twelve decimal places, well beyond any quoted market rate.
+     *
+     * Defined by {@see RateQuote::SCALE}: a rate entered in the form and a rate derived
+     * from the amounts must mean the same precision, or the two would disagree in the
+     * last places for no reason a reader could discover.
+     */
+    public const int RATE_SCALE = RateQuote::SCALE;
 }

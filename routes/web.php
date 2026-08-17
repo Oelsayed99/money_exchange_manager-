@@ -37,6 +37,10 @@ Route::middleware(['auth'])->group(function () {
     // the same calculator that runs when the deal is stored.
     Route::get('exchange', [ExchangeController::class, 'create'])->name('exchange.create');
     Route::post('exchange/preview', [ExchangeController::class, 'preview'])->name('exchange.preview');
+
+    // Rate, amount in, amount out: give any two and this returns the third, so the
+    // operator can enter a deal the way they negotiated it.
+    Route::post('exchange/convert', [ExchangeController::class, 'convert'])->name('exchange.convert');
     Route::post('exchange', [ExchangeController::class, 'store'])->name('exchange.store');
 });
 
