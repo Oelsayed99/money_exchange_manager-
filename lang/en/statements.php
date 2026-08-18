@@ -34,6 +34,7 @@ return [
         'in' => 'In',
         'out' => 'Out',
         'position' => 'Position after',
+        'bucket' => 'Position type',
         'profit' => 'Profit',
     ],
 

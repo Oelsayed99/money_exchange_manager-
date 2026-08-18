@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Export\CsvWriter;
+use App\Domain\Export\StatementExport;
 use App\Domain\Money\Money;
 use App\Domain\Statement\CounterpartyStatement;
 use App\Domain\Statement\StatementBuilder;
@@ -24,6 +26,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * A counterparty's account with the business — the document that replaces the sheet.
@@ -98,6 +101,26 @@ final class CounterpartyStatementController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$this->filenames->download($statement).'"',
         ]);
+    }
+
+    /**
+     * The same statement, as a spreadsheet.
+     *
+     * Through the same {@see resolve} as the screen and the PDF, so all three agree on
+     * the mode. In Client mode the profit column is absent from the file because the
+     * figures were never queried, not because this method left them out.
+     */
+    public function csv(Request $request, Counterparty $counterparty, CsvWriter $writer): StreamedResponse
+    {
+        Gate::authorize('view', $counterparty);
+
+        $statement = $this->resolve($request, $counterparty, $this->currenciesTraded($counterparty));
+
+        if ($statement === null) {
+            abort(404, __('statements.no_currencies'));
+        }
+
+        return $writer->response(new StatementExport($statement, $this->filenames));
     }
 
     /**

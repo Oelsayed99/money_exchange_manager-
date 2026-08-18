@@ -14,4 +14,6 @@ return [
     'save' => 'Save',
     'saved' => 'Saved',
     'status' => 'Status',
+    'currency' => 'Currency',
+    'export_csv' => 'Download CSV',
 ];

@@ -14,4 +14,6 @@ return [
     'save' => 'حفظ',
     'saved' => 'تم الحفظ',
     'status' => 'الحالة',
+    'currency' => 'العملة',
+    'export_csv' => 'تنزيل CSV',
 ];

@@ -40,10 +40,13 @@ Route::middleware(['auth'])->group(function () {
         ->name('counterparties.statement');
     Route::get('counterparties/{counterparty}/statement/pdf', [CounterpartyStatementController::class, 'pdf'])
         ->name('counterparties.statement.pdf');
+    Route::get('counterparties/{counterparty}/statement/csv', [CounterpartyStatementController::class, 'csv'])
+        ->name('counterparties.statement.csv');
 
     // The ledger as a list. Read-only: a mistake is corrected by reversing it, and an
     // edit here would suggest otherwise.
     Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
+    Route::get('transactions/csv', [TransactionController::class, 'csv'])->name('transactions.csv');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

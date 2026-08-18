@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Export\CsvWriter;
+use App\Domain\Export\TransactionsExport;
 use App\Enums\LegRole;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
@@ -19,6 +21,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The ledger, as a list.
@@ -50,20 +53,74 @@ final class TransactionController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $currency = isset($validated['currency'])
-            ? Currency::query()->where('code', $validated['currency'])->first()
+        $transactions = $this->filtered($validated)
+            ->paginate(self::PER_PAGE)
+            ->withQueryString();
+
+        return Inertia::render('transactions/index', [
+            'transactions' => $this->present($transactions),
+            'filters' => [
+                'type' => $validated['type'] ?? null,
+                'status' => $validated['status'] ?? null,
+                'counterparty' => isset($validated['counterparty']) ? (int) $validated['counterparty'] : null,
+                'currency' => $validated['currency'] ?? null,
+                'from' => $validated['from'] ?? null,
+                'to' => $validated['to'] ?? null,
+                'search' => $validated['search'] ?? null,
+            ],
+            'options' => $this->options(),
+        ]);
+    }
+
+    /**
+     * The same list, as a spreadsheet.
+     *
+     * Goes through the same {@see filtered} query as the screen, so what somebody is
+     * looking at is what they get. One row per leg rather than per transaction — see
+     * TransactionsExport.
+     */
+    public function csv(Request $request, CsvWriter $writer): StreamedResponse
+    {
+        Gate::authorize('viewAny', Transaction::class);
+
+        $validated = $request->validate([
+            'type' => ['nullable', Rule::enum(TransactionType::class)],
+            'status' => ['nullable', Rule::enum(TransactionStatus::class)],
+            'counterparty' => ['nullable', 'integer', Rule::exists('counterparties', 'id')],
+            'currency' => ['nullable', 'string', Rule::exists('currencies', 'code')],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'search' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return $writer->response(new TransactionsExport($this->filtered($validated)));
+    }
+
+    /**
+     * The list, narrowed by whichever filters apply.
+     *
+     * Shared by the screen and the export deliberately: two copies would be two
+     * chances for an exported file to contain something the page did not show.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<Transaction>
+     */
+    private function filtered(array $validated): Builder
+    {
+        $currencyId = isset($validated['currency'])
+            ? Currency::query()->where('code', $validated['currency'])->value('id')
             : null;
 
-        $transactions = Transaction::query()
+        return Transaction::query()
             ->with(['legs.currency', 'legs.account', 'counterparty'])
             ->when(isset($validated['type']), fn (Builder $q) => $q->where('type', $validated['type']))
             ->when(isset($validated['status']), fn (Builder $q) => $q->where('status', $validated['status']))
             ->when(isset($validated['counterparty']), fn (Builder $q) => $q->where('counterparty_id', $validated['counterparty']))
             ->when(
-                $currency !== null,
+                $currencyId !== null,
                 // Through the legs, not the transaction: an exchange has no single
                 // currency, and filtering on one column would hide half of every deal.
-                fn (Builder $q) => $q->whereHas('legs', fn (Builder $legs) => $legs->where('currency_id', $currency?->getKey())),
+                fn (Builder $q) => $q->whereHas('legs', fn (Builder $legs) => $legs->where('currency_id', $currencyId)),
             )
             ->when(
                 isset($validated['from']),
@@ -83,23 +140,7 @@ final class TransactionController extends Controller
             // Newest first, and by id within a day so a page boundary cannot land in
             // the middle of two transactions sharing a timestamp.
             ->orderByDesc('occurred_at')
-            ->orderByDesc('id')
-            ->paginate(self::PER_PAGE)
-            ->withQueryString();
-
-        return Inertia::render('transactions/index', [
-            'transactions' => $this->present($transactions),
-            'filters' => [
-                'type' => $validated['type'] ?? null,
-                'status' => $validated['status'] ?? null,
-                'counterparty' => isset($validated['counterparty']) ? (int) $validated['counterparty'] : null,
-                'currency' => $currency?->code,
-                'from' => $validated['from'] ?? null,
-                'to' => $validated['to'] ?? null,
-                'search' => $validated['search'] ?? null,
-            ],
-            'options' => $this->options(),
-        ]);
+            ->orderByDesc('id');
     }
 
     /**

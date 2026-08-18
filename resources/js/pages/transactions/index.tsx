@@ -7,7 +7,7 @@ import { useTranslations } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Sheet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type MoneyPayload = { amount: string; currency: string };
@@ -93,9 +93,20 @@ export default function TransactionsIndex({ transactions, filters, options }: Pr
             <Head title={t('transactions.list.title')} />
 
             <div className="flex flex-col gap-6 p-4">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight">{t('transactions.list.title')}</h1>
-                    <p className="text-muted-foreground text-sm">{t('transactions.list.description')}</p>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl font-semibold tracking-tight">{t('transactions.list.title')}</h1>
+                        <p className="text-muted-foreground text-sm">{t('transactions.list.description')}</p>
+                    </div>
+
+                    {/* A plain link: the browser downloads it, and the query string
+                        carries the same filters as the list being looked at. */}
+                    <Button variant="outline" asChild>
+                        <a href={`/transactions/csv?${new URLSearchParams(clean(filters)).toString()}`}>
+                            <Sheet className="size-4" aria-hidden="true" />
+                            {t('common.export_csv')}
+                        </a>
+                    </Button>
                 </div>
 
                 <div className="flex flex-wrap items-end gap-3">

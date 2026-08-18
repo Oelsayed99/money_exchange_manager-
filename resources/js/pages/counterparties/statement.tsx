@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
 import type { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { AlertTriangle, Download, Printer } from 'lucide-react';
+import { AlertTriangle, Download, Printer, Sheet } from 'lucide-react';
 
 type MoneyPayload = { amount: string; currency: string };
 
@@ -97,6 +97,13 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                             {/* A normal link, not a fetch: the browser handles the
                                 download, and the query string carries the same mode and
                                 period as the page being looked at. */}
+                            <Button variant="outline" asChild>
+                                <a href={`/counterparties/${counterparty.id}/statement/csv?${pdfQuery(filters)}`}>
+                                    <Sheet className="size-4" aria-hidden="true" />
+                                    {t('common.export_csv')}
+                                </a>
+                            </Button>
+
                             <Button asChild>
                                 <a href={`/counterparties/${counterparty.id}/statement/pdf?${pdfQuery(filters)}`}>
                                     <Download className="size-4" aria-hidden="true" />
