@@ -9,5 +9,6 @@ return [
     'counterparties' => 'الأطراف',
     'exchange' => 'صرف عملة',
     'transactions' => 'العمليات',
+    'reconciliations' => 'المطابقة',
     'settings' => 'الإعدادات',
 ];

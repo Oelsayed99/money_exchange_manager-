@@ -6,7 +6,7 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { ArrowLeftRight, Coins, Landmark, LayoutGrid, ReceiptText, Users } from 'lucide-react';
+import { ArrowLeftRight, Coins, Landmark, LayoutGrid, ReceiptText, Scale, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
@@ -25,6 +25,7 @@ export function AppSidebar() {
         // refuse them. The route is guarded regardless.
         ...(can('transactions.record') ? [{ title: t('nav.exchange'), url: '/exchange', icon: ArrowLeftRight }] : []),
         ...(can('transactions.view') ? [{ title: t('nav.transactions'), url: '/transactions', icon: ReceiptText }] : []),
+        ...(can('reconciliations.view') ? [{ title: t('nav.reconciliations'), url: '/reconciliations', icon: Scale }] : []),
         ...(can('accounts.view') ? [{ title: t('nav.accounts'), url: '/accounts', icon: Landmark }] : []),
         ...(can('counterparties.view') ? [{ title: t('nav.counterparties'), url: '/counterparties', icon: Users }] : []),
         ...(can('currencies.view') ? [{ title: t('nav.currencies'), url: '/currencies', icon: Coins }] : []),

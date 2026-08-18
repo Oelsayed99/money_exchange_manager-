@@ -7,6 +7,7 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\TransactionController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -47,6 +48,14 @@ Route::middleware(['auth'])->group(function () {
     // edit here would suggest otherwise.
     Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
     Route::get('transactions/csv', [TransactionController::class, 'csv'])->name('transactions.csv');
+
+    // Does what we hold agree with what the ledger says we hold? Records only —
+    // a difference is corrected by posting an adjustment, never by writing a balance.
+    Route::get('reconciliations', [ReconciliationController::class, 'index'])->name('reconciliations.index');
+    Route::post('reconciliations/expected', [ReconciliationController::class, 'expected'])->name('reconciliations.expected');
+    Route::post('reconciliations', [ReconciliationController::class, 'store'])->name('reconciliations.store');
+    Route::post('reconciliations/{reconciliation}/resolve', [ReconciliationController::class, 'resolve'])
+        ->name('reconciliations.resolve');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

@@ -102,10 +102,10 @@ Recorded so they are not retried:
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
-| 6 Export & reconciliation | 🚧 CSV export done (PDF already shipped in 5.3); xlsx and reconciliation outstanding |
+| 6 Export & reconciliation | 🚧 CSV export and reconciliation done; xlsx and audit improvements outstanding |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 702 backend (1,777 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 733 backend (1,837 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -169,10 +169,11 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 
 7. ✅ **CSV export** for the statement and the transaction list, sharing one `Exportable` layer with the PDF so the client-copy omission is inherited rather than re-decided. BOM for Arabic, formula injection neutralised. See ADR 0013.
 
+8. ✅ **Reconciliation.** `GET /reconciliations`. Records a count against the ledger as of a day, never writes a balance, freezes its figures, and surfaces drift when something is backdated past a completed count. See ADR 0014.
+
 Remaining in Phase 6:
-- **A spreadsheet (xlsx) writer.** Slots in beside `CsvWriter` against the same `Exportable`; needs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet).
-- **The reconciliation workflow.** `reconciliations` table per the assessment: `account_id`, `currency_id`, period, `statement_balance`, `ledger_balance`, `difference`, `status`. "I counted the safe / the bank sent a statement — does it match the ledger?" `ledger:verify` already covers internal consistency; this covers agreement with the outside world.
-- **Audit improvements** — scope not yet pinned down; the audit trail from Phase 1.5 is working.
+- **A spreadsheet (xlsx) writer.** Slots in beside `CsvWriter` against the same `Exportable`; needs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet). Worth checking the owner actually wants it — Excel opens the CSVs correctly, BOM and all.
+- **Audit improvements** — scope not pinned down; the audit trail from Phase 1.5 works. Candidates: an audit-log screen, and recording reads of profit figures.
 
 Then Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 

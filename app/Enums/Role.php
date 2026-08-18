@@ -56,12 +56,17 @@ enum Role: string
                 Permission::RecordTransactions,
                 Permission::PostTransactions,
                 Permission::DeleteDraftTransactions,
+                // Counting a safe is day-to-day work, and the person who counts it is
+                // the person who knows why it disagrees.
+                Permission::ViewReconciliations,
+                Permission::ManageReconciliations,
             ],
             self::Viewer => [
                 Permission::ViewCurrencies,
                 Permission::ViewAccounts,
                 Permission::ViewCounterparties,
                 Permission::ViewTransactions,
+                Permission::ViewReconciliations,
             ],
         };
     }

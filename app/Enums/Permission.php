@@ -42,6 +42,18 @@ enum Permission: string
     /** Discard a draft. Only ever a draft — nothing posted can be deleted. */
     case DeleteDraftTransactions = 'transactions.delete_draft';
 
+    /** Read the reconciliation record. */
+    case ViewReconciliations = 'reconciliations.view';
+
+    /**
+     * Record a count and explain a difference.
+     *
+     * Separate from posting, because reconciling writes no ledger entry — a difference
+     * is corrected by posting an adjustment, which needs the posting permission on its
+     * own merits.
+     */
+    case ManageReconciliations = 'reconciliations.manage';
+
     /** @return list<string> */
     public static function values(): array
     {

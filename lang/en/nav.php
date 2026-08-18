@@ -9,5 +9,6 @@ return [
     'counterparties' => 'Counterparties',
     'exchange' => 'Exchange',
     'transactions' => 'Transactions',
+    'reconciliations' => 'Reconciliation',
     'settings' => 'Settings',
 ];
