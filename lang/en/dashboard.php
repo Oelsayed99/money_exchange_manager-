@@ -52,6 +52,19 @@ return [
         'pick_currency' => 'Choose a currency to see this by month.',
     ],
 
+    'flow' => [
+        'title' => 'In and out by month',
+        'hint' => 'Shown as two bars. A busy month that nets to zero is not a quiet one.',
+    ],
+    'split' => [
+        'title' => 'Where clients stand',
+        'hint' => 'A count of relationships, so it needs no currency. Settled clients are not listed.',
+    ],
+    'top' => [
+        'title' => 'Largest positions',
+        'hint' => 'Both sides shown separately. A client can be on both, and the two are never netted.',
+    ],
+
     'parties' => [
         'title' => 'Clients',
         'name' => 'Client',

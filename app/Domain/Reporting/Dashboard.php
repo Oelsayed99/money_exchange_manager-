@@ -25,6 +25,9 @@ final readonly class Dashboard
      * @param  array<string, Money>  $profit  margin recognised in the period
      * @param  list<CounterpartyPosition>  $counterparties
      * @param  array<string, string>  $monthlyProfit  YYYY-MM => amount, only when one currency is chosen
+     * @param  array<string, array{in: string, out: string}>  $monthlyFlow  same, for money moved
+     * @param  array<string, int>  $statusCounts  status => how many clients, before any status filter
+     * @param  list<ClientTotal>  $topClients  the largest few positions, only when one currency is chosen
      * @param  list<string>  $currencies  codes appearing anywhere above, in a stable order
      */
     public function __construct(
@@ -36,6 +39,9 @@ final readonly class Dashboard
         public array $profit,
         public array $counterparties,
         public array $monthlyProfit,
+        public array $monthlyFlow,
+        public array $statusCounts,
+        public array $topClients,
         public array $currencies,
     ) {}
 }

@@ -8,5 +8,6 @@ return [
     'accounts' => 'Accounts',
     'counterparties' => 'Counterparties',
     'exchange' => 'Exchange',
+    'transactions' => 'Transactions',
     'settings' => 'Settings',
 ];

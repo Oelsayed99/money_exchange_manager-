@@ -101,11 +101,11 @@ Recorded so they are not retried:
 | 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
-| 5 Dashboard & reports | ✅ rate-driven entry, client statement, PDF, dashboard with filters |
+| 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | ❌ not started |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 658 backend (1,565 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 685 backend (1,748 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -122,7 +122,6 @@ Recorded so they are not retried:
 - **Vendored `components/ui/**` still uses physical CSS properties** — RTL debt, exempted from lint.
 - **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
-- **No global transaction list.** The counterparty statement covers per-party history, but there is no screen showing the ledger as a whole.
 - **An exchange settled in cash does not appear on the counterparty's statement**, even with the party recorded on the transaction, because no entry touches their accounts. Correct by design (ADR 0009) but worth knowing before someone reports it as a bug.
 - **Drafts have no UI.** Service-level only.
 - **Validating a draft creates ledger accounts** it would use — documented trade-off, leaves empty accounts if discarded.
@@ -163,8 +162,9 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 3. ✅ **PDF of that statement, in either mode.** `GET /counterparties/{id}/statement/pdf`, same query string as the screen. mPDF, chosen because DomPDF cannot shape Arabic. See ADR 0010.
 4. ✅ **Dashboard.** Filters by client, period, currency and status, all in the URL. Four statuses, not three — *mixed* is real and common. Positions are current; the dates narrow what moved. See ADR 0011.
 
-**Phase 5 is complete.** Next is Phase 6 (export and reconciliation) and Phase 7 (quality and release). Before either, two things are worth pulling forward:
-- A **global transaction list**. The ledger still has no screen of its own; the statement only covers per-party history.
-- **Burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
+5. ✅ **Dashboard statistics.** Margin by month, in-and-out by month, where clients stand (a count, so it needs no currency), and largest positions with both sides kept apart. See ADR 0011.
+6. ✅ **Transaction list.** `GET /transactions`, read-only, filters by type, status, client, currency, period and a reference/notes search. See ADR 0012.
+
+**Phase 5 is complete.** Next is Phase 6 (export and reconciliation) and Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
 Still worth pulling forward at some point: a **transaction list screen**, since the ledger has no UI of its own. The client statement covers most of the need.

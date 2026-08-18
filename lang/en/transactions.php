@@ -96,6 +96,52 @@ return [
         'reversal' => 'Reversal',
     ],
 
+    'statuses' => [
+        'draft' => 'Draft',
+        'pending' => 'Pending',
+        'posted' => 'Posted',
+        'reversed' => 'Reversed',
+    ],
+
+    'roles' => [
+        'received' => 'Received',
+        'delivered' => 'Delivered',
+        'fee' => 'Fee',
+        'expense' => 'Expense',
+        'commission' => 'Commission',
+    ],
+
+    'list' => [
+        'title' => 'Transactions',
+        'description' => 'Every movement in the ledger, newest first.',
+        'columns' => [
+            'date' => 'Date',
+            'type' => 'Type',
+            'counterparty' => 'Counterparty',
+            'movement' => 'Movement',
+            'reference' => 'Reference',
+            'status' => 'Status',
+        ],
+        'filters' => [
+            'type' => 'Type',
+            'status' => 'Status',
+            'counterparty' => 'Counterparty',
+            'currency' => 'Currency',
+            'from' => 'From',
+            'to' => 'To',
+            'search' => 'Reference or notes',
+            'search_placeholder' => 'Search…',
+            'all' => 'All',
+            'clear' => 'Clear filters',
+        ],
+        'none' => 'No transaction matches these filters.',
+        'showing' => 'Showing :from–:to of :total',
+        'previous' => 'Previous',
+        'next' => 'Next',
+        'reversal_of' => 'Reverses #:id',
+        'read_only' => 'The ledger is append-only. A mistake is corrected by reversing it, never by editing it.',
+    ],
+
     'methods' => [
         'transfer' => 'Bank transfer',
         'deposit' => 'Deposit',

@@ -7,6 +7,7 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\TransactionController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -39,6 +40,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('counterparties.statement');
     Route::get('counterparties/{counterparty}/statement/pdf', [CounterpartyStatementController::class, 'pdf'])
         ->name('counterparties.statement.pdf');
+
+    // The ledger as a list. Read-only: a mistake is corrected by reversing it, and an
+    // edit here would suggest otherwise.
+    Route::get('transactions', [TransactionController::class, 'index'])->name('transactions.index');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

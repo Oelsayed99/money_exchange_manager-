@@ -46,6 +46,24 @@ Recharts draws with SVG coordinates, which are floats; no charting library avoid
 
 Everything a reader *sees* — axis ticks, tooltip — is rendered from the exact decimal string that came from the server. The plotted value is never displayed. This is the line: float for where the pixel goes, exact string for what the number is.
 
+## Decision 7 — Which statistics, and which of them need a currency
+
+Four charts, and the constraint above decides the shape of each:
+
+| Chart | Needs a currency | Why |
+|---|---|---|
+| Margin by month | yes | Bars of pounds beside bars of dollars would be read as a comparison |
+| In and out by month | yes | Summing amounts of different currencies into one bar is arithmetic on quantities that cannot be added |
+| Where clients stand | **no** | It counts relationships. Counting across currencies is meaningful in a way adding money is not |
+| Largest positions | yes | As above, and a ranking implies a common scale |
+
+Two of them refuse to net rather than drawing one bar:
+
+- **In and out** are two bars, not a net line. A month where a million came in and a million went out is not a quiet month, and a net of zero would draw them identically.
+- **Largest positions** shows each client's two sides separately. One bar per client would have to net an obligation against a holding to decide its length — the thing ADR 0007 exists to prevent.
+
+The status split is counted **before** the status filter is applied. Narrowing it to the slice already chosen would draw a chart of one bar and call it a breakdown. Settled clients are excluded because they drop out of the list entirely once every bucket is zero, so the slice would always be nought.
+
 ## Consequences
 
 - Recharts is used for the first time. The dashboard chunk is ~376 kB (110 kB gzipped), lazily loaded.

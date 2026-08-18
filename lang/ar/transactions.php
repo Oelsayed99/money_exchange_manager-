@@ -95,6 +95,52 @@ return [
         'reversal' => 'عكس قيد',
     ],
 
+    'statuses' => [
+        'draft' => 'مسودة',
+        'pending' => 'معلّقة',
+        'posted' => 'مُقيَّدة',
+        'reversed' => 'معكوسة',
+    ],
+
+    'roles' => [
+        'received' => 'مستلم',
+        'delivered' => 'مسلَّم',
+        'fee' => 'رسوم',
+        'expense' => 'مصروف',
+        'commission' => 'عمولة',
+    ],
+
+    'list' => [
+        'title' => 'العمليات',
+        'description' => 'كل الحركات في دفتر القيود، الأحدث أولًا.',
+        'columns' => [
+            'date' => 'التاريخ',
+            'type' => 'النوع',
+            'counterparty' => 'الطرف',
+            'movement' => 'الحركة',
+            'reference' => 'المرجع',
+            'status' => 'الحالة',
+        ],
+        'filters' => [
+            'type' => 'النوع',
+            'status' => 'الحالة',
+            'counterparty' => 'الطرف',
+            'currency' => 'العملة',
+            'from' => 'من',
+            'to' => 'إلى',
+            'search' => 'المرجع أو الملاحظات',
+            'search_placeholder' => 'بحث…',
+            'all' => 'الكل',
+            'clear' => 'مسح الفلاتر',
+        ],
+        'none' => 'لا توجد عملية مطابقة لهذه الفلاتر.',
+        'showing' => 'عرض :from–:to من :total',
+        'previous' => 'السابق',
+        'next' => 'التالي',
+        'reversal_of' => 'عكس للعملية رقم :id',
+        'read_only' => 'دفتر القيود للإضافة فقط. يُصحَّح الخطأ بعكسه، لا بتعديله.',
+    ],
+
     'methods' => [
         'transfer' => 'تحويل بنكي',
         'deposit' => 'إيداع',

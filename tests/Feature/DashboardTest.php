@@ -235,6 +235,80 @@ describe('margin', function (): void {
     });
 });
 
+describe('the statistics', function (): void {
+    it('counts clients by status, ignoring the status filter', function (): void {
+        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+        movement(TransactionType::LoanGiven, party('Borrower'), '400000');
+
+        $both = party('Both');
+        movement(TransactionType::CreditDeposit, $both, '900000');
+        movement(TransactionType::LoanGiven, $both, '100000');
+
+        // The split describes the whole book, so narrowing to one status must not
+        // reduce the chart to a single slice.
+        $counts = dashboard(new DashboardFilters(status: CounterpartyStatus::OwesUs))->statusCounts;
+
+        expect($counts)->toBe(['owes_us' => 1, 'has_credit' => 1, 'mixed' => 1]);
+    });
+
+    // Settled parties drop out of the list entirely, so the slice would always be nought.
+    it('leaves settled out of the split', function (): void {
+        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+
+        expect(array_keys(dashboard()->statusCounts))->not->toContain('settled');
+    });
+
+    it('breaks money in and out down by month for one currency', function (): void {
+        $holder = party('Holder');
+        movement(TransactionType::CreditDeposit, $holder, '500000', null, '2026-05-10');
+        movement(TransactionType::CreditDeposit, $holder, '300000', null, '2026-06-10');
+        movement(TransactionType::CreditSettlement, $holder, '200000', null, '2026-06-20');
+
+        $flow = dashboard(new DashboardFilters(currency: $this->egp))->monthlyFlow;
+
+        expect($flow['2026-05']['in'])->toBe('500000.0000000000')
+            ->and($flow['2026-05']['out'])->toBe('0.0000000000')
+            ->and($flow['2026-06']['in'])->toBe('300000.0000000000')
+            ->and($flow['2026-06']['out'])->toBe('200000.0000000000');
+    });
+
+    // Bars of one currency beside bars of another would be read as a comparison, and
+    // adding them into one bar would be arithmetic on quantities that cannot be added.
+    it('draws no flow chart without a currency', function (): void {
+        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+
+        expect(dashboard()->monthlyFlow)->toBe([]);
+    });
+
+    it('ranks the largest positions, keeping both sides apart', function (): void {
+        $big = party('Big');
+        movement(TransactionType::CreditDeposit, $big, '1000000');
+        movement(TransactionType::LoanGiven, $big, '400000');
+        movement(TransactionType::CreditDeposit, party('Small'), '5000');
+
+        $top = dashboard(new DashboardFilters(currency: $this->egp))->topClients;
+
+        expect($top[0]->name)->toBe('Big')
+            ->and($top[0]->owedToThem->toDisplayString())->toBe('1000000.00')
+            ->and($top[0]->owedToUs->toDisplayString())->toBe('400000.00')
+            ->and($top[1]->name)->toBe('Small');
+    });
+
+    it('shows no ranking without a currency', function (): void {
+        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+
+        expect(dashboard()->topClients)->toBe([]);
+    });
+
+    it('draws no more than eight clients', function (): void {
+        foreach (range(1, 12) as $n) {
+            movement(TransactionType::CreditDeposit, party("Client {$n}"), (string) (1000 * $n));
+        }
+
+        expect(dashboard(new DashboardFilters(currency: $this->egp))->topClients)->toHaveCount(8);
+    });
+});
+
 describe('the screen', function (): void {
     it('redirects a guest to the login page', function (): void {
         $this->get('/dashboard')->assertRedirect('/login');

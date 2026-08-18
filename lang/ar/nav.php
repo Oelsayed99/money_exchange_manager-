@@ -8,5 +8,6 @@ return [
     'accounts' => 'الحسابات',
     'counterparties' => 'الأطراف',
     'exchange' => 'صرف عملة',
+    'transactions' => 'العمليات',
     'settings' => 'الإعدادات',
 ];

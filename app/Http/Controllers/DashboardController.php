@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Domain\Money\Money;
+use App\Domain\Reporting\ClientTotal;
 use App\Domain\Reporting\CounterpartyPosition;
 use App\Domain\Reporting\Dashboard;
 use App\Domain\Reporting\DashboardFilters;
@@ -100,6 +101,17 @@ final class DashboardController extends Controller
             'delivered' => $this->amounts($dashboard->deliveredToParties),
             'profit' => $this->amounts($dashboard->profit),
             'monthly_profit' => $dashboard->monthlyProfit,
+            'monthly_flow' => $dashboard->monthlyFlow,
+            'status_counts' => $dashboard->statusCounts,
+            'top_clients' => array_map(
+                fn (ClientTotal $client): array => [
+                    'id' => $client->id,
+                    'name' => $client->name,
+                    'owed_to_us' => $client->owedToUs->jsonSerialize(),
+                    'owed_to_them' => $client->owedToThem->jsonSerialize(),
+                ],
+                $dashboard->topClients,
+            ),
             'counterparties' => array_map(
                 fn (CounterpartyPosition $party): array => [
                     'id' => $party->id,

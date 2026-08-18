@@ -36,6 +36,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class DashboardQuery
 {
+    /** Enough to see the shape of the book without turning the chart into a wall. */
+    private const int TOP_CLIENTS = 8;
+
     public function __construct(private readonly CurrencyRegistry $currencies) {}
 
     public function run(DashboardFilters $filters): Dashboard
@@ -46,7 +49,12 @@ final class DashboardQuery
         $cash = $this->cashOnHand($filters);
 
         [$owedToUs, $owedToThem] = $this->totalPositions($positions);
-        $parties = $this->parties($positions, $filters);
+
+        // Counted before the status filter is applied. The split is the shape of the
+        // whole book; narrowing it to the slice already chosen would draw a chart of
+        // one bar and call it a breakdown.
+        $everyone = $this->parties($positions);
+        $statusCounts = $this->statusCounts($everyone);
 
         return new Dashboard(
             cashOnHand: $cash,
@@ -55,8 +63,11 @@ final class DashboardQuery
             receivedFromParties: $activity['in'],
             deliveredToParties: $activity['out'],
             profit: $profit,
-            counterparties: $parties,
+            counterparties: $this->withStatus($everyone, $filters->status),
             monthlyProfit: $filters->currency !== null ? $this->monthlyProfit($filters) : [],
+            monthlyFlow: $filters->currency !== null ? $this->monthlyFlow($filters) : [],
+            statusCounts: $statusCounts,
+            topClients: $this->topClients($everyone, $filters),
             currencies: $this->currencyOrder([$cash, $owedToUs, $owedToThem, $activity['in'], $activity['out'], $profit]),
         );
     }
@@ -278,7 +289,7 @@ final class DashboardQuery
      * @param  list<array{owner_id: int, currency_id: int, subkind: string, amount: string}>  $positions
      * @return list<CounterpartyPosition>
      */
-    private function parties(array $positions, DashboardFilters $filters): array
+    private function parties(array $positions): array
     {
         /** @var array<int, array<string, array<string, Money>>> $byParty */
         $byParty = [];
@@ -320,12 +331,6 @@ final class DashboardQuery
 
             $overall = CounterpartyStatus::across(array_values($statusByCurrency));
 
-            // Applied here rather than in SQL: a status is a reading of four positions,
-            // not a column, so there is nothing to put in a WHERE clause.
-            if ($filters->status !== null && $overall !== $filters->status) {
-                continue;
-            }
-
             $parties[] = new CounterpartyPosition(
                 id: $id,
                 name: (string) ($names[$id] ?? ''),
@@ -338,6 +343,160 @@ final class DashboardQuery
         usort($parties, fn (CounterpartyPosition $a, CounterpartyPosition $b): int => strcmp($a->name, $b->name));
 
         return $parties;
+    }
+
+    /**
+     * Money in and out, month by month, for one currency.
+     *
+     * Guarded on a currency for the same reason as the margin chart, but with a harder
+     * edge: summing amounts of different currencies into one bar would not merely be
+     * hard to read, it would be arithmetic on quantities that cannot be added.
+     *
+     * @return array<string, array{in: string, out: string}>
+     */
+    private function monthlyFlow(DashboardFilters $filters): array
+    {
+        if ($filters->currency === null) {
+            return [];
+        }
+
+        $month = "DATE_FORMAT(ledger_entries.occurred_at, '%Y-%m')";
+
+        $rows = $this->counterpartyAccounts($filters)
+            ->join('ledger_entries', 'ledger_entries.ledger_account_id', '=', 'ledger_accounts.id')
+            ->when($filters->since() !== null, fn (Builder $q) => $q->where('ledger_entries.occurred_at', '>=', $filters->since()))
+            ->when($filters->until() !== null, fn (Builder $q) => $q->where('ledger_entries.occurred_at', '<=', $filters->until()))
+            ->groupBy(DB::raw($month), 'ledger_accounts.subkind', 'ledger_entries.direction')
+            ->orderBy(DB::raw($month))
+            ->select([
+                DB::raw("{$month} as month"),
+                'ledger_accounts.subkind',
+                'ledger_entries.direction',
+                DB::raw('SUM(ledger_entries.amount) as total'),
+            ])
+            ->get();
+
+        $spec = $filters->currency->spec();
+        $flow = [];
+
+        foreach ($rows as $row) {
+            $subkind = LedgerAccountSubkind::from((string) $row->subkind);
+            $bucket = $subkind->bucket();
+
+            if ($bucket === null) {
+                continue;
+            }
+
+            $month = (string) $row->month;
+            $flow[$month] ??= ['in' => Money::zero($spec), 'out' => Money::zero($spec)];
+
+            $increased = $subkind->kind()->signFor(EntryDirection::from((string) $row->direction)) > 0;
+            $side = $bucket->isLiability() === $increased ? 'in' : 'out';
+
+            $flow[$month][$side] = $flow[$month][$side]->plus(Money::of((string) $row->total, $spec));
+        }
+
+        return array_map(
+            fn (array $month): array => [
+                'in' => $month['in']->toStorageString(),
+                'out' => $month['out']->toStorageString(),
+            ],
+            $flow,
+        );
+    }
+
+    /**
+     * How many clients sit in each status.
+     *
+     * A count, not an amount — which is why this one needs no currency. Counting
+     * relationships is meaningful across currencies in a way that adding money is not.
+     *
+     * @param  list<CounterpartyPosition>  $parties
+     * @return array<string, int>
+     */
+    private function statusCounts(array $parties): array
+    {
+        $counts = [];
+
+        foreach (CounterpartyStatus::cases() as $status) {
+            $counts[$status->value] = 0;
+        }
+
+        foreach ($parties as $party) {
+            $counts[$party->status->value]++;
+        }
+
+        // Settled parties are dropped from the list entirely once every bucket is zero,
+        // so the count would always be nought and the slice always missing.
+        unset($counts[CounterpartyStatus::Settled->value]);
+
+        return $counts;
+    }
+
+    /**
+     * The largest few positions, for the comparison chart.
+     *
+     * Needs a currency: bars of dirhams beside bars of pounds would be read as a
+     * ranking, and they are not one.
+     *
+     * @param  list<CounterpartyPosition>  $parties
+     * @return list<ClientTotal>
+     */
+    private function topClients(array $parties, DashboardFilters $filters): array
+    {
+        if ($filters->currency === null) {
+            return [];
+        }
+
+        $code = $filters->currency->code;
+        $spec = $filters->currency->spec();
+        $totals = [];
+
+        foreach ($parties as $party) {
+            $buckets = $party->positions[$code] ?? null;
+
+            if ($buckets === null) {
+                continue;
+            }
+
+            $owedToUs = Money::zero($spec);
+            $owedToThem = Money::zero($spec);
+
+            foreach ($buckets as $bucket => $amount) {
+                if (BalanceBucket::from($bucket)->isAsset()) {
+                    $owedToUs = $owedToUs->plus($amount);
+                } else {
+                    $owedToThem = $owedToThem->plus($amount);
+                }
+            }
+
+            $totals[] = new ClientTotal($party->id, $party->name, $owedToUs, $owedToThem);
+        }
+
+        usort($totals, fn (ClientTotal $a, ClientTotal $b): int => $b->magnitude()->compareTo($a->magnitude()));
+
+        return array_slice($totals, 0, self::TOP_CLIENTS);
+    }
+
+    /**
+     * Narrow the list to one status.
+     *
+     * In PHP rather than SQL: a status is a reading of four positions, not a column,
+     * so there is nothing to put in a WHERE clause.
+     *
+     * @param  list<CounterpartyPosition>  $parties
+     * @return list<CounterpartyPosition>
+     */
+    private function withStatus(array $parties, ?CounterpartyStatus $status): array
+    {
+        if ($status === null) {
+            return $parties;
+        }
+
+        return array_values(array_filter(
+            $parties,
+            fn (CounterpartyPosition $party): bool => $party->status === $status,
+        ));
     }
 
     /** @param array<string, Money> $buckets */
