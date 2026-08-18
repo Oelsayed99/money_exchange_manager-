@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CounterpartyController;
+use App\Http\Controllers\CounterpartyStatementController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\LocaleController;
@@ -32,6 +33,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('counterparties', CounterpartyController::class)
         ->except(['show', 'destroy']);
+
+    // The document that replaces the spreadsheet: one party, one currency, every line.
+    Route::get('counterparties/{counterparty}/statement', [CounterpartyStatementController::class, 'show'])
+        ->name('counterparties.statement');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

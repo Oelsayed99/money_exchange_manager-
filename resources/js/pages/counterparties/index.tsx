@@ -7,7 +7,7 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { Pencil, Plus } from 'lucide-react';
+import { FileText, Pencil, Plus } from 'lucide-react';
 
 interface Position {
     bucket: string;
@@ -174,6 +174,12 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                         <StatusBadge active={row.is_active} />
                                     </td>
                                     <td className="px-4 py-3 text-end">
+                                        <Button variant="ghost" size="sm" asChild>
+                                            <Link href={`/counterparties/${row.id}/statement`}>
+                                                <FileText className="size-4" aria-hidden="true" />
+                                                {t('statements.title')}
+                                            </Link>
+                                        </Button>
                                         {canManage && (
                                             <Button variant="ghost" size="sm" asChild>
                                                 <Link href={`/counterparties/${row.id}/edit`}>

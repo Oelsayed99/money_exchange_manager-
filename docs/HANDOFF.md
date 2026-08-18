@@ -96,7 +96,7 @@ Recorded so they are not retried:
 | 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
-| 5 Dashboard & reports | 🚧 5.1 rate-driven deal entry done; statement, PDF and dashboard outstanding |
+| 5 Dashboard & reports | 🚧 5.1 rate-driven entry, 5.2 client statement done; PDF and dashboard outstanding |
 | 6 Export & reconciliation | ❌ not started |
 | 7 Quality & release | ❌ not started |
 
@@ -117,7 +117,8 @@ Recorded so they are not retried:
 - **Vendored `components/ui/**` still uses physical CSS properties** — RTL debt, exempted from lint.
 - **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
-- **No transaction list/statement screen.** The ledger is invisible in the UI.
+- **No global transaction list.** The counterparty statement covers per-party history, but there is no screen showing the ledger as a whole.
+- **An exchange settled in cash does not appear on the counterparty's statement**, even with the party recorded on the transaction, because no entry touches their accounts. Correct by design (ADR 0009) but worth knowing before someone reports it as a bug.
 - **Drafts have no UI.** Service-level only.
 - **Validating a draft creates ledger accounts** it would use — documented trade-off, leaves empty accounts if discarded.
 - **Auth pages still hardcoded English** (they lay out correctly in RTL).
@@ -153,10 +154,8 @@ Recorded so they are not retried:
 The owner restated the product in their own words on 2026-08-18, and it maps to four pieces of work. The first is done; the rest are in order.
 
 1. ✅ **Rate-driven deal entry.** Type one amount plus the rate, get the other. See ADR 0008.
-2. **The client statement** — the direct replacement for the spreadsheet. One counterparty, **a tab per currency** (in/out/position only means something inside one currency; the sheet was EGP-only), columns for in, out and the running position. Plus an all-currencies summary that lists positions side by side and never adds them up.
-   - **No signed difference column.** The sheet flips between `(899,510)` and `50,490` and the sign carries the whole meaning. Label it — *"Client credit 1,383,540 EGP"* / *"Owed to us 899,510 EGP"* — because a parenthesis is the easiest thing to misread on a page handed to a client. This is what the four buckets were built for.
-   - **Me mode / client mode** toggle, per the owner decisions above.
-3. **PDF of that statement, in either mode.** Header states Internal copy or Client copy. The client version is generated from a query that never selects the profit columns, so there is no profit in the file to leak.
+2. ✅ **The client statement.** `GET /counterparties/{id}/statement`, currency + mode + date filters in the URL, labelled positions, me/client toggle enforced at the query. See ADR 0009.
+3. **PDF of that statement, in either mode.** Currently the browser's own print, which works but is not a document. Header should state Internal copy or Client copy. The client version must go on being generated from a profit-free query, so there is nothing in the file to leak.
 4. **Dashboard** — filters by client, period, currency and status. Status is **per currency**: *they owe me* / *they have credit* / *closed* (all buckets zero). A client owing in USD while holding credit in EGP shows as **mixed** at client level and resolves when a currency is chosen.
 
 Still worth pulling forward at some point: a **transaction list screen**, since the ledger has no UI of its own. The client statement covers most of the need.
