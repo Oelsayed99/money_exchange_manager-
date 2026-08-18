@@ -86,12 +86,14 @@ Recorded so they are not retried:
 | `??` in a test helper for "explicitly null" | Cannot express it; use `array_key_exists`. |
 | Physical CSS (`ml-auto`) with RTL | Broke the login layout. Logical properties only, enforced by an ESLint rule (vendored `components/ui/**` exempted as known debt). |
 | React-effect theme application | Runs after first paint → flash. Must be a blocking script in the Blade head. |
+| A page test living beside its page | `app.tsx` globbed `./pages/**/*.tsx`, so `create.test.tsx` was **bundled into production assets** and resolvable as a page. The glob now excludes `*.test.tsx`. Found by reading `vite build` output, not by any test. |
+| Charting exact decimals | Recharts needs numbers for SVG coordinates. Resolved by plotting `Number(amount)` for geometry only and rendering every visible figure from the exact string. |
 
 ---
 
 ## 5. Current status
 
-**Phases 1–4 complete. Phase 5 is on its last item.**
+**Phases 1 to 5 complete.**
 
 | Phase | State |
 |---|---|
@@ -99,11 +101,11 @@ Recorded so they are not retried:
 | 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
-| 5 Dashboard & reports | 🚧 5.1 rate-driven entry, 5.2 statement, 5.3 PDF done; dashboard outstanding |
+| 5 Dashboard & reports | ✅ rate-driven entry, client statement, PDF, dashboard with filters |
 | 6 Export & reconciliation | ❌ not started |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 581 backend (1,346 assertions) + 35 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 658 backend (1,565 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -159,6 +161,10 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 1. ✅ **Rate-driven deal entry.** Type one amount plus the rate, get the other. See ADR 0008.
 2. ✅ **The client statement.** `GET /counterparties/{id}/statement`, currency + mode + date filters in the URL, labelled positions, me/client toggle enforced at the query. See ADR 0009.
 3. ✅ **PDF of that statement, in either mode.** `GET /counterparties/{id}/statement/pdf`, same query string as the screen. mPDF, chosen because DomPDF cannot shape Arabic. See ADR 0010.
-4. **Dashboard** — filters by client, period, currency and status. Status is **per currency**: *they owe me* / *they have credit* / *closed* (all buckets zero). A client owing in USD while holding credit in EGP shows as **mixed** at client level and resolves when a currency is chosen.
+4. ✅ **Dashboard.** Filters by client, period, currency and status, all in the URL. Four statuses, not three — *mixed* is real and common. Positions are current; the dates narrow what moved. See ADR 0011.
+
+**Phase 5 is complete.** Next is Phase 6 (export and reconciliation) and Phase 7 (quality and release). Before either, two things are worth pulling forward:
+- A **global transaction list**. The ledger still has no screen of its own; the statement only covers per-party history.
+- **Burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
 Still worth pulling forward at some point: a **transaction list screen**, since the ledger has no UI of its own. The client statement covers most of the need.

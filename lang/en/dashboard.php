@@ -1,0 +1,66 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+    'title' => 'Dashboard',
+    'description' => 'Where everything stands, and what moved.',
+
+    /*
+     * The owner's three cases in their own words, plus the fourth the four-bucket
+     * model makes possible and which naming as either one would misrepresent.
+     */
+    'statuses' => [
+        'owes_us' => 'They owe us',
+        'has_credit' => 'They have credit',
+        'mixed' => 'Both',
+        'settled' => 'Settled',
+    ],
+    'status_hints' => [
+        'owes_us' => 'They hold our money or owe it to us.',
+        'has_credit' => 'We hold their money or owe it to them.',
+        'mixed' => 'Live positions on both sides. These are not netted.',
+        'settled' => 'Nobody owes anybody anything.',
+    ],
+
+    'cards' => [
+        'cash_on_hand' => 'Cash on hand',
+        'cash_on_hand_hint' => 'In our own custody locations. Not narrowed by client.',
+        'owed_to_us' => 'Owed to us',
+        'owed_to_us_hint' => 'Receivables plus our money held by others.',
+        'owed_to_them' => 'Owed to them',
+        'owed_to_them_hint' => 'Payables plus client credit we are holding.',
+        'profit' => 'Margin earned',
+        'profit_hint' => 'In the period shown, in the currency it was earned in.',
+        'received' => 'In from clients',
+        'delivered' => 'Out to clients',
+    ],
+
+    'filters' => [
+        'client' => 'Client',
+        'currency' => 'Currency',
+        'status' => 'Status',
+        'from' => 'From',
+        'to' => 'To',
+        'all' => 'All',
+        'clear' => 'Clear filters',
+    ],
+
+    'chart' => [
+        'title' => 'Margin by month',
+        'hint' => 'One currency at a time — figures in different currencies share no scale.',
+        'pick_currency' => 'Choose a currency to see this by month.',
+    ],
+
+    'parties' => [
+        'title' => 'Clients',
+        'name' => 'Client',
+        'status' => 'Status',
+        'positions' => 'Positions',
+        'statement' => 'Statement',
+        'none' => 'No client matches these filters.',
+    ],
+
+    'period_note' => 'Positions are as they stand now. The dates narrow what moved, not where things stand.',
+    'no_data' => 'Nothing recorded yet.',
+];

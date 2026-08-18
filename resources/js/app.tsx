@@ -14,7 +14,10 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) => resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob('./pages/**/*.tsx')),
+    // Test files are excluded explicitly. A page test living beside its page is
+    // otherwise picked up by this glob, bundled into the production assets, and served
+    // to users — and "exchange/create.test" becomes a resolvable page name.
+    resolve: (name) => resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob(['./pages/**/*.tsx', '!./pages/**/*.test.tsx'])),
     setup({ el, App, props }) {
         const root = createRoot(el);
 
