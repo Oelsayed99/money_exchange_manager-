@@ -35,8 +35,11 @@ Route::middleware(['auth'])->group(function () {
         ->except(['show', 'destroy']);
 
     // The document that replaces the spreadsheet: one party, one currency, every line.
+    // The PDF takes the same query string, so what is on screen is what gets handed over.
     Route::get('counterparties/{counterparty}/statement', [CounterpartyStatementController::class, 'show'])
         ->name('counterparties.statement');
+    Route::get('counterparties/{counterparty}/statement/pdf', [CounterpartyStatementController::class, 'pdf'])
+        ->name('counterparties.statement.pdf');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

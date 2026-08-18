@@ -7,6 +7,8 @@ namespace App\Http\Controllers;
 use App\Domain\Money\Money;
 use App\Domain\Statement\CounterpartyStatement;
 use App\Domain\Statement\StatementBuilder;
+use App\Domain\Statement\StatementFilename;
+use App\Domain\Statement\StatementPdf;
 use App\Domain\Statement\StatementRow;
 use App\Enums\BalanceBucket;
 use App\Enums\LedgerOwnerType;
@@ -15,6 +17,7 @@ use App\Models\Counterparty;
 use App\Models\Currency;
 use App\Models\LedgerAccount;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -32,27 +35,22 @@ use Inertia\Response;
  */
 final class CounterpartyStatementController extends Controller
 {
-    public function __construct(private readonly StatementBuilder $statements) {}
+    public function __construct(
+        private readonly StatementBuilder $statements,
+        private readonly StatementPdf $pdf,
+        private readonly StatementFilename $filenames,
+    ) {}
 
     public function show(Request $request, Counterparty $counterparty): Response
     {
         Gate::authorize('view', $counterparty);
 
         $currencies = $this->currenciesTraded($counterparty);
-
-        $validated = $request->validate([
-            'currency' => ['nullable', 'string', Rule::in($currencies->pluck('code')->all())],
-            'mode' => ['nullable', Rule::enum(StatementMode::class)],
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-        ]);
-
-        $currency = $currencies->firstWhere('code', $validated['currency'] ?? null)
-            ?? $currencies->first();
+        $statement = $this->resolve($request, $counterparty, $currencies);
 
         // A party with no ledger activity has nothing to state. Say so plainly rather
         // than rendering an empty table that looks like a settled account.
-        if (! $currency instanceof Currency) {
+        if ($statement === null) {
             return Inertia::render('counterparties/statement', [
                 'counterparty' => ['id' => $counterparty->id, 'name' => $counterparty->name],
                 'currencies' => [],
@@ -63,25 +61,76 @@ final class CounterpartyStatementController extends Controller
             ]);
         }
 
-        $mode = StatementMode::tryFrom($validated['mode'] ?? '') ?? StatementMode::Client;
-        $from = isset($validated['from']) ? Carbon::parse($validated['from']) : null;
-        $to = isset($validated['to']) ? Carbon::parse($validated['to']) : null;
-
-        $statement = $this->statements->build($counterparty, $currency, $mode, $from, $to);
-
         return Inertia::render('counterparties/statement', [
             'counterparty' => ['id' => $counterparty->id, 'name' => $counterparty->name],
             'currencies' => $currencies->map(fn (Currency $c): array => ['id' => $c->id, 'code' => $c->code])->values()->all(),
             'statement' => $this->present($statement),
             'filters' => [
-                'currency' => $currency->code,
-                'mode' => $mode->value,
-                'from' => $from?->toDateString(),
-                'to' => $to?->toDateString(),
+                'currency' => $statement->currency->code,
+                'mode' => $statement->mode->value,
+                'from' => $statement->from?->toDateString(),
+                'to' => $statement->to?->toDateString(),
             ],
             'modes' => $this->modes(),
             'bucketLabels' => $this->bucketLabels(),
         ]);
+    }
+
+    /**
+     * The same statement, as a document.
+     *
+     * Built through the same path as the screen, from the same query string, so the
+     * page somebody is looking at and the file they hand over cannot say different
+     * things. In particular the mode is resolved once, in {@see resolve}: a client
+     * copy on screen produces a client copy on paper.
+     */
+    public function pdf(Request $request, Counterparty $counterparty): HttpResponse
+    {
+        Gate::authorize('view', $counterparty);
+
+        $statement = $this->resolve($request, $counterparty, $this->currenciesTraded($counterparty));
+
+        if ($statement === null) {
+            abort(404, __('statements.no_currencies'));
+        }
+
+        return response($this->pdf->render($statement), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$this->filenames->download($statement).'"',
+        ]);
+    }
+
+    /**
+     * Read the filters and build the statement, or null when there is nothing to build.
+     *
+     * Shared by the screen and the document deliberately. Two copies of this would be
+     * two chances for a client copy to become an internal one on the way to a file.
+     *
+     * @param  Collection<int, Currency>  $currencies
+     */
+    private function resolve(Request $request, Counterparty $counterparty, Collection $currencies): ?CounterpartyStatement
+    {
+        $validated = $request->validate([
+            'currency' => ['nullable', 'string', Rule::in($currencies->pluck('code')->all())],
+            'mode' => ['nullable', Rule::enum(StatementMode::class)],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        $currency = $currencies->firstWhere('code', $validated['currency'] ?? null)
+            ?? $currencies->first();
+
+        if (! $currency instanceof Currency) {
+            return null;
+        }
+
+        return $this->statements->build(
+            $counterparty,
+            $currency,
+            StatementMode::tryFrom($validated['mode'] ?? '') ?? StatementMode::Client,
+            isset($validated['from']) ? Carbon::parse($validated['from']) : null,
+            isset($validated['to']) ? Carbon::parse($validated['to']) : null,
+        );
     }
 
     /**

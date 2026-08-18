@@ -51,6 +51,11 @@ return [
     'to' => 'To',
     'clear_dates' => 'Any date',
     'print' => 'Print',
+    'download_pdf' => 'Download PDF',
+    'page' => 'Page',
+    'period' => ':from to :to',
+    'all_dates' => 'All dates',
+    'generated_at' => 'Generated :at',
 
     'settled' => 'Settled — neither party holds anything of the other.',
     'no_activity' => 'Nothing recorded in this period.',

@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
 import type { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { AlertTriangle, Printer } from 'lucide-react';
+import { AlertTriangle, Download, Printer } from 'lucide-react';
 
 type MoneyPayload = { amount: string; currency: string };
 
@@ -88,10 +88,22 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                     </div>
 
                     {statement && (
-                        <Button type="button" variant="outline" onClick={() => window.print()} className="print:hidden">
-                            <Printer className="size-4" aria-hidden="true" />
-                            {t('statements.print')}
-                        </Button>
+                        <div className="flex gap-2 print:hidden">
+                            <Button type="button" variant="outline" onClick={() => window.print()}>
+                                <Printer className="size-4" aria-hidden="true" />
+                                {t('statements.print')}
+                            </Button>
+
+                            {/* A normal link, not a fetch: the browser handles the
+                                download, and the query string carries the same mode and
+                                period as the page being looked at. */}
+                            <Button asChild>
+                                <a href={`/counterparties/${counterparty.id}/statement/pdf?${pdfQuery(filters)}`}>
+                                    <Download className="size-4" aria-hidden="true" />
+                                    {t('statements.download_pdf')}
+                                </a>
+                            </Button>
+                        </div>
                     )}
                 </div>
 
@@ -331,6 +343,24 @@ function Positions({
             ))}
         </div>
     );
+}
+
+/**
+ * The current filters as a query string, dropping the ones that are not set.
+ *
+ * The document has to be the page: same currency, same mode, same period. Sending an
+ * empty `from` would be read as a filter rather than the absence of one.
+ */
+function pdfQuery(filters: { currency: string | null; mode: string; from: string | null; to: string | null }): string {
+    const query = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(filters)) {
+        if (value) {
+            query.set(key, value);
+        }
+    }
+
+    return query.toString();
 }
 
 /**

@@ -63,4 +63,4 @@ Silently adding a declaration to the figures would make the statement disagree w
 
 - The statement reads the ledger directly rather than `ledger_balances`. Balances are derived everywhere else in this application, and a statement with its own opinion would be a second source of truth on the one document a client actually sees.
 - Exchanges settled in cash do not appear on a party's statement even when the party is recorded on the transaction, because no entry touches their accounts. This is correct — the statement is their account with the business, not a list of deals they were involved in.
-- Printing is the browser's, for now. A dedicated PDF is the next step.
+- The browser's own print remains available alongside the PDF. See ADR 0010 for the document.

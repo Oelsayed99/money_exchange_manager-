@@ -44,6 +44,11 @@ return [
     'to' => 'إلى',
     'clear_dates' => 'كل التواريخ',
     'print' => 'طباعة',
+    'download_pdf' => 'تنزيل PDF',
+    'page' => 'صفحة',
+    'period' => 'من :from إلى :to',
+    'all_dates' => 'كل التواريخ',
+    'generated_at' => 'أُنشئ في :at',
 
     'settled' => 'الحساب مُصفّى — لا يحتفظ أي طرف بشيء للآخر.',
     'no_activity' => 'لا توجد حركات في هذه الفترة.',

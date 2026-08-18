@@ -18,7 +18,7 @@ A multi-currency financial management application for a money-exchange business:
 
 ## 2. Stack (final, not to be reopened)
 
-Laravel 12.64 · PHP 8.5.7 · MySQL 9.6 · React 19 + Inertia 2 · TypeScript strict · Tailwind 4 · shadcn/ui · Recharts (installed, unused) · Pest · Vitest + RTL · Playwright (configured, **no browsers installed, zero e2e tests**) · spatie/laravel-permission · Larastan level 8.
+Laravel 12.64 · PHP 8.5.7 · MySQL 9.6 · mPDF · React 19 + Inertia 2 · TypeScript strict · Tailwind 4 · shadcn/ui · Recharts (installed, unused) · Pest · Vitest + RTL · Playwright (configured, **no browsers installed, zero e2e tests**) · spatie/laravel-permission · Larastan level 8.
 
 Recorded in `docs/adr/0001-frontend-architecture.md`. An earlier Livewire choice was superseded once Section 16 arrived.
 
@@ -71,6 +71,9 @@ Recorded so they are not retried:
 
 | Attempt | Why it failed |
 |---|---|
+| DomPDF for statements | No complex text shaping: Arabic renders as isolated, unjoined letters. Replaced by mPDF before it was written. |
+| mPDF layout tables in RTL | Laid out shrink-to-fit and centred, pulling both ends of the header and footer into the middle of the page. Force `dir="ltr"` on layout tables and place the cells by hand; widths must be in the `<style>` block, not attributes. |
+| Searching PDF bytes for a profit figure | mPDF subsets the fonts, so text becomes glyph ids in a private encoding. The search finds nothing whether the figure is there or not — a test that passes while asserting nothing. Assert on `StatementPdf::html()` instead. |
 | `--env=testing` to target the test DB | No `.env.testing` exists; it silently used the default env and **wiped the dev database twice**. Correct form: `DB_DATABASE=finance_test php artisan …` |
 | Concurrency test under `RefreshDatabase` | Holds an open transaction, so a second connection sees nothing. Blocked 50s then failed. Moved to `tests/Integration` with `DatabaseTruncation`. |
 | `app()->runningInConsole()` to detect console vs HTTP | **True under PHPUnit.** Cannot distinguish an artisan command from a test request. |
@@ -88,7 +91,7 @@ Recorded so they are not retried:
 
 ## 5. Current status
 
-**Phases 1, 2 and 3 complete. Phase 4 is one item short.**
+**Phases 1–4 complete. Phase 5 is on its last item.**
 
 | Phase | State |
 |---|---|
@@ -96,7 +99,7 @@ Recorded so they are not retried:
 | 2 Accounts & parties | ✅ accounts, account currencies, counterparties, four-bucket separation, opening balances, **screens** |
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
-| 5 Dashboard & reports | 🚧 5.1 rate-driven entry, 5.2 client statement done; PDF and dashboard outstanding |
+| 5 Dashboard & reports | 🚧 5.1 rate-driven entry, 5.2 statement, 5.3 PDF done; dashboard outstanding |
 | 6 Export & reconciliation | ❌ not started |
 | 7 Quality & release | ❌ not started |
 
@@ -155,7 +158,7 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 
 1. ✅ **Rate-driven deal entry.** Type one amount plus the rate, get the other. See ADR 0008.
 2. ✅ **The client statement.** `GET /counterparties/{id}/statement`, currency + mode + date filters in the URL, labelled positions, me/client toggle enforced at the query. See ADR 0009.
-3. **PDF of that statement, in either mode.** Currently the browser's own print, which works but is not a document. Header should state Internal copy or Client copy. The client version must go on being generated from a profit-free query, so there is nothing in the file to leak.
+3. ✅ **PDF of that statement, in either mode.** `GET /counterparties/{id}/statement/pdf`, same query string as the screen. mPDF, chosen because DomPDF cannot shape Arabic. See ADR 0010.
 4. **Dashboard** — filters by client, period, currency and status. Status is **per currency**: *they owe me* / *they have credit* / *closed* (all buckets zero). A client owing in USD while holding credit in EGP shows as **mixed** at client level and resolves when a currency is chosen.
 
 Still worth pulling forward at some point: a **transaction list screen**, since the ledger has no UI of its own. The client statement covers most of the need.
