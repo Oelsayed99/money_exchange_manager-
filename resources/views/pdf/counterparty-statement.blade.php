@@ -6,8 +6,9 @@
     page rather than a screen: repeating headers, page numbers, and a footer that says
     which copy this is on every sheet.
 
-    Every amount is printed from the string the ledger holds. Nothing here formats,
-    rounds or parses a number.
+    Every amount is printed from the string the ledger holds. The only thing done to it
+    is grouping its digits for reading — string surgery on the integer part. Nothing
+    here rounds, parses, or converts a number.
 --}}
 @php
     /** @var \App\Domain\Statement\CounterpartyStatement $statement */
@@ -113,7 +114,7 @@
         {{ __('statements.declared_opening_body') }}
         @foreach ($statement->declaredOpening as $bucket => $amount)
             <br />{{ __('counterparties.buckets.'.$bucket) }}:
-            <span dir="ltr" class="num">{{ $amount->toDisplayString() }} {{ $statement->currency->code }}</span>
+            <span dir="ltr" class="num">{{ $amount->toGroupedString() }} {{ $statement->currency->code }}</span>
         @endforeach
     </div>
 @endif
@@ -136,7 +137,7 @@
                     <div class="muted small">{{ __('statements.closing') }}</div>
                     <div>{{ __('statements.positions.'.$bucket->value) }}</div>
                     <div dir="ltr" class="num" style="font-size: 12pt;">
-                        {{ $statement->closing[$bucket->value]->toDisplayString() }} {{ $statement->currency->code }}
+                        {{ $statement->closing[$bucket->value]->toGroupedString() }} {{ $statement->currency->code }}
                     </div>
                 </td>
             @endforeach
@@ -171,13 +172,13 @@
                     @endif
                 </td>
                 <td align="{{ $opposite }}" class="num">
-                    @if ($row->in)<span dir="ltr">{{ $row->in->toDisplayString() }}</span>@endif
+                    @if ($row->in)<span dir="ltr">{{ $row->in->toGroupedString() }}</span>@endif
                 </td>
                 <td align="{{ $opposite }}" class="num">
-                    @if ($row->out)<span dir="ltr">{{ $row->out->toDisplayString() }}</span>@endif
+                    @if ($row->out)<span dir="ltr">{{ $row->out->toGroupedString() }}</span>@endif
                 </td>
                 <td align="{{ $opposite }}">
-                    <span dir="ltr" class="num">{{ $row->balanceAfter->toDisplayString() }}</span>
+                    <span dir="ltr" class="num">{{ $row->balanceAfter->toGroupedString() }}</span>
                     {{-- Which position moved. Without it this is the old ambiguous
                          running total again. --}}
                     <div class="muted small">{{ __('statements.positions.'.$row->bucket->value) }}</div>
@@ -185,7 +186,7 @@
                 @if ($showsProfit)
                     <td align="{{ $opposite }}" class="num">
                         @if ($row->profit)
-                            <span dir="ltr">{{ $row->profit->toDisplayString() }} {{ $row->profit->currency->code }}</span>
+                            <span dir="ltr">{{ $row->profit->toGroupedString() }} {{ $row->profit->currency->code }}</span>
                         @endif
                     </td>
                 @endif
@@ -205,13 +206,13 @@
                 <tr>
                     <td colspan="2" align="{{ $align }}">{{ __('counterparties.buckets.'.$bucket->value) }}</td>
                     <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->totalIn[$bucket->value]->toDisplayString() }}</span>
+                        <span dir="ltr">{{ $statement->totalIn[$bucket->value]->toGroupedString() }}</span>
                     </td>
                     <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->totalOut[$bucket->value]->toDisplayString() }}</span>
+                        <span dir="ltr">{{ $statement->totalOut[$bucket->value]->toGroupedString() }}</span>
                     </td>
                     <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->closing[$bucket->value]->toDisplayString() }}</span>
+                        <span dir="ltr">{{ $statement->closing[$bucket->value]->toGroupedString() }}</span>
                     </td>
                     @if ($showsProfit)
                         <td></td>
@@ -229,7 +230,7 @@
                 <strong>{{ __('statements.profit_total') }}</strong>
                 @foreach ($statement->profit as $code => $amount)
                     <span dir="ltr" class="num" style="padding-{{ $rtl ? 'right' : 'left' }}: 8pt;">
-                        {{ $amount->toDisplayString() }} {{ $code }}
+                        {{ $amount->toGroupedString() }} {{ $code }}
                     </span>
                 @endforeach
             </td>

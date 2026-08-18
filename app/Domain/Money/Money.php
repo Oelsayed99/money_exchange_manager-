@@ -237,6 +237,32 @@ final readonly class Money implements JsonSerializable, Stringable
     }
 
     /**
+     * The amount grouped for reading: 3957540.00 becomes 3,957,540.00.
+     *
+     * **Presentation only. The result is not a valid decimal** — `Decimal::isValid`
+     * rejects a thousands separator, deliberately, because a grouped figure arriving
+     * from a form or an import is ambiguous about which separator means what. Never
+     * store this, never send it anywhere it might come back, and never parse it.
+     * {@see toStorageString} and {@see toDisplayString} are the ones that round-trip.
+     *
+     * Exists because a statement is read by people. Grouping is string surgery on the
+     * integer part; no arithmetic happens and no digit moves.
+     */
+    public function toGroupedString(): string
+    {
+        $amount = $this->toDisplayString();
+
+        $negative = str_starts_with($amount, '-');
+        $bare = $negative ? substr($amount, 1) : $amount;
+
+        [$whole, $fraction] = array_pad(explode('.', $bare, 2), 2, null);
+
+        $grouped = strrev(implode(',', str_split(strrev((string) $whole), 3)));
+
+        return ($negative ? '-' : '').$grouped.($fraction === null ? '' : '.'.$fraction);
+    }
+
+    /**
      * Money crosses the HTTP boundary as a string, never a JSON number.
      *
      * JavaScript's `number` is IEEE-754 float64, so serialising an amount as a JSON

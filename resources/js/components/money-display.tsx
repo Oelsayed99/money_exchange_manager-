@@ -1,3 +1,4 @@
+import { groupDigits } from '@/lib/money';
 import { cn } from '@/lib/utils';
 
 interface MoneyDisplayProps {
@@ -15,7 +16,9 @@ interface MoneyDisplayProps {
  * Three things this gets right that ad-hoc markup does not:
  *
  * - The amount is a string end to end. It is never parsed into a JavaScript number,
- *   because float64 cannot hold an exact decimal (risk R1).
+ *   because float64 cannot hold an exact decimal (risk R1). Digits are grouped for
+ *   reading here, at the last possible moment, so the value everywhere behind this
+ *   component stays a plain decimal.
  * - The number itself is always laid out left to right, even in an Arabic interface.
  *   Digits and their grouping do not mirror; only the surrounding text does.
  * - Tabular figures, so columns of amounts line up on the decimal point.
@@ -33,7 +36,7 @@ export function MoneyDisplay({ amount, currency, className, signed = false }: Mo
             )}
         >
             <span className="text-muted-foreground text-xs">{currency}</span>
-            <span>{amount}</span>
+            <span>{groupDigits(amount)}</span>
         </span>
     );
 }

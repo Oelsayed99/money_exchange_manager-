@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Money\CurrencySpec;
+use App\Domain\Money\Decimal;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Exceptions\PrecisionLoss;
 use App\Domain\Money\Money;
@@ -266,5 +267,51 @@ describe('CurrencySpec', function (): void {
     it('compares by code', function (): void {
         expect(usd()->is(new CurrencySpec('USD', 2)))->toBeTrue()
             ->and(usd()->is(aed()))->toBeFalse();
+    });
+});
+
+/*
+ * Grouping is presentation and nothing else. It is the one thing in this class that
+ * produces a string the rest of the system will refuse to accept back.
+ */
+describe('grouping digits for reading', function (): void {
+    it('groups the integer part in threes', function (string $amount, string $expected): void {
+        expect(Money::of($amount, new CurrencySpec('EGP'))->toGroupedString())->toBe($expected);
+    })->with([
+        ['0', '0.00'],
+        ['1', '1.00'],
+        ['999', '999.00'],
+        ['1000', '1,000.00'],
+        ['999999', '999,999.00'],
+        ['2574000', '2,574,000.00'],
+        ['3957540', '3,957,540.00'],
+        ['1234567890', '1,234,567,890.00'],
+    ]);
+
+    it('keeps the sign in front of the digits', function (): void {
+        expect(Money::of('-2574000', new CurrencySpec('EGP'))->toGroupedString())->toBe('-2,574,000.00');
+    });
+
+    it('leaves the fraction alone', function (): void {
+        expect(Money::of('1234.567891', new CurrencySpec('EGP'))->toGroupedString())->toBe('1,234.567891');
+    });
+
+    it('groups a zero-decimal currency without inventing a point', function (): void {
+        expect(Money::of('2574000', new CurrencySpec('JPY', 0))->toGroupedString())->toBe('2,574,000');
+    });
+
+    // The whole reason this is separate from toDisplayString: the grouped form is not
+    // a decimal, and everything that reads a decimal must go on refusing it.
+    it('produces something the decimal parser rejects', function (): void {
+        $grouped = Money::of('2574000', new CurrencySpec('EGP'))->toGroupedString();
+
+        expect(Decimal::isValid($grouped))->toBeFalse()
+            ->and(Decimal::isValid(Money::of('2574000', new CurrencySpec('EGP'))->toDisplayString()))->toBeTrue();
+    });
+
+    it('changes no digit of the value', function (): void {
+        $money = Money::of('3957540.12', new CurrencySpec('EGP'));
+
+        expect(str_replace(',', '', $money->toGroupedString()))->toBe($money->toDisplayString());
     });
 });

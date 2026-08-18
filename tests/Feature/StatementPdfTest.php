@@ -137,17 +137,18 @@ describe('the document', function (): void {
  */
 describe('what reaches the client copy', function (): void {
     it('carries the figures the client is entitled to', function (): void {
-        expect(statementHtml(StatementMode::Client))->toContain('3957540.00');
+        expect(statementHtml(StatementMode::Client))->toContain('3,957,540.00');
     });
 
     it('carries no margin at all', function (): void {
-        expect(statementHtml(StatementMode::Client))->not->toContain('13579');
+        expect(statementHtml(StatementMode::Client))->not->toContain('13,579.00');
     });
 
-    // The paired positive. Without it the assertion above could be passing because the
-    // figure is nowhere in either document.
+    // The paired positive, and it has to use the same grouped form as the assertion
+    // above. Checking for "13579" would pass in both modes now that digits are
+    // grouped, which is a test that asserts nothing.
     it('carries the margin in my own copy', function (): void {
-        expect(statementHtml(StatementMode::Internal))->toContain('13579');
+        expect(statementHtml(StatementMode::Internal))->toContain('13,579.00');
     });
 
     it('leaves the profit column out of the client copy entirely', function (): void {
@@ -175,7 +176,7 @@ describe('the position on the page', function (): void {
     });
 
     it('never prints a single combined figure', function (): void {
-        expect(statementHtml(StatementMode::Client))->toContain('3957540.00');
+        expect(statementHtml(StatementMode::Client))->toContain('3,957,540.00');
     });
 });
 
