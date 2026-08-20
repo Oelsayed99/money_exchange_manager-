@@ -10,14 +10,48 @@ declare global {
     const route: typeof routeFn;
 }
 
+/**
+ * Resolve a page, and recover from a stale tab.
+ *
+ * A failed page resolution otherwise surfaces as an unhandled promise rejection and
+ * nothing else: the click does nothing, the interface stays where it was, and only the
+ * console says why. That is worth handling because the common cause is not a bug —
+ * it is a tab that was open across a deploy, asking for a hashed chunk that no longer
+ * exists. Reloading fetches the current manifest and the click works.
+ *
+ * The attempt is recorded so a page that is genuinely missing fails loudly the second
+ * time rather than reloading in a loop, and cleared on success so a later stale chunk
+ * gets its own retry.
+ */
+async function resolvePage(name: string) {
+    const key = `inertia:reload:${name}`;
+
+    try {
+        const page = await resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob('./pages/**/*.tsx'));
+
+        sessionStorage.removeItem(key);
+
+        return page;
+    } catch (error) {
+        if (sessionStorage.getItem(key) === null) {
+            sessionStorage.setItem(key, '1');
+            window.location.reload();
+        }
+
+        throw error;
+    }
+}
+
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    // Test files are excluded explicitly. A page test living beside its page is
-    // otherwise picked up by this glob, bundled into the production assets, and served
-    // to users — and "exchange/create.test" becomes a resolvable page name.
-    resolve: (name) => resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob(['./pages/**/*.tsx', '!./pages/**/*.test.tsx'])),
+    // A single glob pattern, deliberately. Excluding test files with the array form
+    // (['./pages/**/*.tsx', '!./pages/**/*.test.tsx']) works for the bundle but stops
+    // Vite tracking the glob for *new* files, so a page added while the dev server is
+    // running 404s until it is restarted. Page tests live in resources/js/tests
+    // instead, which keeps them out of the bundle without touching this pattern.
+    resolve: (name) => resolvePage(name),
     setup({ el, App, props }) {
         const root = createRoot(el);
 

@@ -86,7 +86,8 @@ Recorded so they are not retried:
 | `??` in a test helper for "explicitly null" | Cannot express it; use `array_key_exists`. |
 | Physical CSS (`ml-auto`) with RTL | Broke the login layout. Logical properties only, enforced by an ESLint rule (vendored `components/ui/**` exempted as known debt). |
 | React-effect theme application | Runs after first paint → flash. Must be a blocking script in the Blade head. |
-| A page test living beside its page | `app.tsx` globbed `./pages/**/*.tsx`, so `create.test.tsx` was **bundled into production assets** and resolvable as a page. The glob now excludes `*.test.tsx`. Found by reading `vite build` output, not by any test. |
+| A page test living beside its page | `app.tsx` globbed `./pages/**/*.tsx`, so `create.test.tsx` was **bundled into production assets** and resolvable as a page. Found by reading `vite build` output, not by any test. |
+| Excluding it with a negative glob (`['./pages/**/*.tsx', '!./pages/**/*.test.tsx']`) | Fixed the bundle and broke something worse: **Vite stops tracking the glob for new files**, so any page added while the dev server runs 404s until it is restarted. Cost two debugging sessions. Page tests now live in `resources/js/tests/`, and the glob is a single pattern again. Guarded by `resources/js/tests/no-tests-in-pages.test.ts`. |
 | Charting exact decimals | Recharts needs numbers for SVG coordinates. Resolved by plotting `Number(amount)` for geometry only and rendering every visible figure from the exact string. |
 
 ---
@@ -105,7 +106,7 @@ Recorded so they are not retried:
 | 6 Export & reconciliation | 🚧 CSV export and reconciliation done; xlsx and audit improvements outstanding |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 733 backend (1,837 assertions) + 49 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 733 backend (1,837 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
