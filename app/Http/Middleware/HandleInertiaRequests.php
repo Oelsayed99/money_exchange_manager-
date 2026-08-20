@@ -51,14 +51,18 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+        // Split on a hyphen, and not every quote has one. Reading both halves with a
+        // default keeps an author-less quote from becoming a null passed to trim().
+        $quote = str(Inspiring::quotes()->random())->explode('-');
+        $message = trim((string) $quote->get(0, ''));
+        $author = trim((string) $quote->get(1, ''));
 
         $locale = app()->getLocale();
 
         return [
             ...parent::share($request),
             'name' => config('app.name'),
-            'quote' => ['message' => trim($message), 'author' => trim($author)],
+            'quote' => ['message' => $message, 'author' => $author],
             'auth' => [
                 'user' => $request->user(),
                 // Sent so the interface can avoid offering actions that would be

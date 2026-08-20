@@ -1,11 +1,13 @@
 includes:
     - vendor/larastan/larastan/extension.neon
-    # 21 inherited errors from the Laravel starter kit and stock config files:
-    # `env()` returning bool|string in config/, and unnarrowed $request->user()
-    # in the scaffolded auth controllers. Baselined rather than silenced so the
-    # debt stays visible and level 8 is enforced on all NEW code from day one.
-    # Burn this down in Phase 7; never add to it to make a new error go away.
-    - phpstan-baseline.neon
+
+# There is no baseline. There was one — 20 inherited errors from the Laravel
+# starter kit and the stock config files — and it was cleared in Phase 7. Level 8
+# now holds across the whole application with nothing exempted.
+#
+# Do not reintroduce one. A baseline is a list of things the analyser found and
+# was told to stop mentioning; the last entry on the last list was hiding a
+# TypeError on a live route.
 
 parameters:
     paths:

@@ -33,7 +33,16 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+
+            // Off. `serve` registers two unauthenticated routes — GET and PUT on
+            // /storage/{path} — and this application stores no user files and serves
+            // none. Both are signature-protected, so leaving them on would not be a
+            // hole; removing them is one less thing on the outside of the building
+            // that has to keep being right.
+            //
+            // Turn this back on if a disk ever needs to serve files, and expect the
+            // route-guard test to ask you to say so.
+            'serve' => false,
             'throw' => false,
         ],
 

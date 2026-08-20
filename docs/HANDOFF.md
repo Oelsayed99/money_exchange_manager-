@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | ❌ not started |
+| 7 Quality & release | 🚧 baseline cleared, route guard test in place; reviews and docs outstanding |
 
-**Tests: 778 backend (1,989 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 788 backend (1,999 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -119,7 +119,6 @@ Recorded so they are not retried:
 - **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care. Numbering resumes at 0008 and is correct from there.
 - **`om.he.els@gmail.com` no longer exists** — destroyed by my `migrate:fresh`. Only `test@example.com` (administrator) remains.
 - **Playwright**: configured, no browsers, no e2e tests.
-- **PHPStan baseline holds 20 inherited errors** from the starter kit. Burn down in Phase 7.
 - **Vendored `components/ui/**` still uses physical CSS properties** — RTL debt, exempted from lint.
 - **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
@@ -180,7 +179,13 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 Remaining in Phase 6:
 - **A spreadsheet (xlsx) writer** — the only item left, and **the owner has not confirmed they want it**. It slots in beside `CsvWriter` against the same `Exportable`, but costs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet) for a format the CSVs already cover — Excel opens them correctly, Arabic included, because of the BOM. Ask before building.
 
-Then **Phase 7 — quality and release**: complete automated testing, accessibility review, security review, performance review, Arabic/RTL review, deployment and backup documentation. Worth doing early in it: burn down the **20 inherited PHPStan baseline errors**, and either use Playwright or remove it.
+**Phase 6 is complete** — xlsx was skipped on the owner's decision (the CSVs open in Excel correctly, BOM and all).
+
+**Phase 7 is under way:**
+11. ✅ **Static-analysis baseline cleared.** Level 8 with nothing exempted; the last baselined entry was hiding a broken contract. See ADR 0017.
+12. ✅ **Route guard test.** Every route is authenticated or listed as public with a reason; unused file-serving routes removed. See ADR 0018.
+
+Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, deployment documentation, **backup and recovery documentation** (the owner has real data on a laptop with no backup — arguably the most urgent item in the phase), and either using Playwright or removing it.
 
 Then Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
