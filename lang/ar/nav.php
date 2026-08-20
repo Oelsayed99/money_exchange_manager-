@@ -8,6 +8,7 @@ return [
     'accounts' => 'الحسابات',
     'counterparties' => 'الأطراف',
     'exchange' => 'صرف عملة',
+    'movements' => 'تسجيل حركة',
     'transactions' => 'العمليات',
     'reconciliations' => 'المطابقة',
     'settings' => 'الإعدادات',

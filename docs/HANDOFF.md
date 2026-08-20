@@ -52,7 +52,7 @@ Append-only `audit_logs`, DB triggers, actor stored twice (`user_id` **without**
 1. **Both** a `method` field (تحويل/ايداع/كاش/cheque/other) **and** Deposit/Withdrawal meaning owner capital.
 2. Cross-currency credit settlement recognises **ordinary trading profit**.
 3. Partial settlements allocate **FIFO**.
-4. Credit balances **may go negative — always allowed** (against recommendation; owner's call). A non-blocking warning is retained. *Note: the warning is designed but **not yet implemented** — no credit settlement UI exists.*
+4. Credit balances **may go negative — always allowed** (against recommendation; owner's call). A non-blocking warning is retained, and is now **implemented** on the movements screen (ADR 0015).
 
 ### Owner decisions on profit visibility (2026-08-18)
 
@@ -106,7 +106,7 @@ Recorded so they are not retried:
 | 6 Export & reconciliation | 🚧 CSV export and reconciliation done; xlsx and audit improvements outstanding |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 733 backend (1,837 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 762 backend (1,904 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -125,6 +125,7 @@ Recorded so they are not retried:
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
 - **An exchange settled in cash does not appear on the counterparty's statement**, even with the party recorded on the transaction, because no entry touches their accounts. Correct by design (ADR 0009) but worth knowing before someone reports it as a bug.
 - **Drafts have no UI.** Service-level only.
+- ~~No way to record anything but an exchange~~ — fixed by the movements screen (ADR 0015).
 - **Validating a draft creates ledger accounts** it would use — documented trade-off, leaves empty accounts if discarded.
 - **Auth pages still hardcoded English** (they lay out correctly in RTL).
 - Owner edits on GitHub web UI have caused divergence once; resolved by rebase, not force-push.
@@ -171,6 +172,8 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 7. ✅ **CSV export** for the statement and the transaction list, sharing one `Exportable` layer with the PDF so the client-copy omission is inherited rather than re-decided. BOM for Arabic, formula injection neutralised. See ADR 0013.
 
 8. ✅ **Reconciliation.** `GET /reconciliations`. Records a count against the ledger as of a day, never writes a balance, freezes its figures, and surfaces drift when something is backdated past a completed count. See ADR 0014.
+
+9. ✅ **Recording movements.** `GET /movements`. Every type the ledger supports except exchange and reversal, with the counterparty's four positions shown live and the negative-credit warning finally built. See ADR 0015.
 
 Remaining in Phase 6:
 - **A spreadsheet (xlsx) writer.** Slots in beside `CsvWriter` against the same `Exportable`; needs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet). Worth checking the owner actually wants it — Excel opens the CSVs correctly, BOM and all.

@@ -7,6 +7,7 @@ use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\MovementController;
 use App\Http\Controllers\ReconciliationController;
 use App\Http\Controllers\TransactionController;
 use Illuminate\Support\Facades\Route;
@@ -56,6 +57,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('reconciliations', [ReconciliationController::class, 'store'])->name('reconciliations.store');
     Route::post('reconciliations/{reconciliation}/resolve', [ReconciliationController::class, 'resolve'])
         ->name('reconciliations.resolve');
+
+    // Everything the ledger posts except an exchange: credit in and out, lending and
+    // borrowing, settlements, transfers, fees and expenses.
+    Route::get('movements', [MovementController::class, 'create'])->name('movements.create');
+    Route::post('movements/positions', [MovementController::class, 'positions'])->name('movements.positions');
+    Route::post('movements', [MovementController::class, 'store'])->name('movements.store');
 
     // The preview computes the margin without recording anything, on the server, using
     // the same calculator that runs when the deal is stored.

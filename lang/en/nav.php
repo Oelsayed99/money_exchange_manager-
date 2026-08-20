@@ -8,6 +8,7 @@ return [
     'accounts' => 'Accounts',
     'counterparties' => 'Counterparties',
     'exchange' => 'Exchange',
+    'movements' => 'Record a movement',
     'transactions' => 'Transactions',
     'reconciliations' => 'Reconciliation',
     'settings' => 'Settings',

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use App\Domain\Ledger\BucketEffect;
+
 /**
  * The nineteen transaction types of Section 6.
  *
@@ -62,5 +64,70 @@ enum TransactionType: string
     public function isSystemGenerated(): bool
     {
         return $this === self::Reversal;
+    }
+
+    /**
+     * Whether an operator can record this from the movements screen.
+     *
+     * An exchange needs two amounts and a rate and has its own screen. A reversal is
+     * never created directly — it is the consequence of reversing something else, and
+     * offering it here would let somebody post a reversal that reverses nothing.
+     */
+    public function recordableByHand(): bool
+    {
+        return ! in_array($this, [self::CurrencyExchange, self::Reversal], true);
+    }
+
+    /** Whether the movement is between the business and somebody else. */
+    public function needsCounterparty(): bool
+    {
+        return $this->bucketEffect() !== null;
+    }
+
+    /** Whether it moves money between two of our own locations. */
+    public function needsDestinationAccount(): bool
+    {
+        return $this === self::Transfer;
+    }
+
+    /**
+     * Whether the operator must say which position it opens.
+     *
+     * Only an opening balance: every other type's bucket follows from what it is,
+     * which is the point of having types at all.
+     */
+    public function needsBucket(): bool
+    {
+        return $this === self::OpeningBalance;
+    }
+
+    /**
+     * Which of a counterparty's positions this moves, and which way.
+     *
+     * Read against the posting rules, not invented: money in against what they owe
+     * *reduces* the receivable, while lending *increases* it, and both are cash
+     * crossing the counter in opposite directions. See docs/posting-rules.md §2.
+     */
+    public function bucketEffect(): ?BucketEffect
+    {
+        return match ($this) {
+            // They pay us: what they owe shrinks.
+            self::MoneyReceived, self::ReceivableSettlement => new BucketEffect(BalanceBucket::Receivable, false),
+
+            // We hand money over against a promise: what they owe grows.
+            self::LoanGiven => new BucketEffect(BalanceBucket::Receivable, true),
+
+            // We take money on a promise: what we owe grows.
+            self::LoanReceived => new BucketEffect(BalanceBucket::Payable, true),
+
+            // We pay them: what we owe shrinks.
+            self::MoneyPaid, self::PayableSettlement, self::Refund => new BucketEffect(BalanceBucket::Payable, false),
+
+            // Their money, into and out of our keeping.
+            self::CreditDeposit => new BucketEffect(BalanceBucket::CreditTrust, true),
+            self::CreditSettlement => new BucketEffect(BalanceBucket::CreditTrust, false),
+
+            default => null,
+        };
     }
 }

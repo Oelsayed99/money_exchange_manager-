@@ -1,7 +1,7 @@
+import ExchangeCreate from '@/pages/exchange/create';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import ExchangeCreate from '@/pages/exchange/create';
 
 // A working stand-in for Inertia's useForm: the page is built around data changing in
 // response to typing, so a stub that does not actually hold state would test nothing.
