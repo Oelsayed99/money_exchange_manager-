@@ -6,7 +6,7 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { ArrowLeftRight, ArrowRightLeft, Coins, Landmark, LayoutGrid, ReceiptText, Scale, Users } from 'lucide-react';
+import { ArrowLeftRight, ArrowRightLeft, Coins, Landmark, LayoutGrid, ReceiptText, Scale, ShieldCheck, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
@@ -30,6 +30,7 @@ export function AppSidebar() {
         ...(can('accounts.view') ? [{ title: t('nav.accounts'), url: '/accounts', icon: Landmark }] : []),
         ...(can('counterparties.view') ? [{ title: t('nav.counterparties'), url: '/counterparties', icon: Users }] : []),
         ...(can('currencies.view') ? [{ title: t('nav.currencies'), url: '/currencies', icon: Coins }] : []),
+        ...(can('audit.view') ? [{ title: t('nav.audit'), url: '/audit', icon: ShieldCheck }] : []),
     ];
 
     return (

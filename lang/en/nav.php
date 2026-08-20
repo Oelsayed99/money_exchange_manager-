@@ -11,5 +11,6 @@ return [
     'movements' => 'Record a movement',
     'transactions' => 'Transactions',
     'reconciliations' => 'Reconciliation',
+    'audit' => 'Audit trail',
     'settings' => 'Settings',
 ];

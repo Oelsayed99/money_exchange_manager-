@@ -11,5 +11,6 @@ return [
     'movements' => 'تسجيل حركة',
     'transactions' => 'العمليات',
     'reconciliations' => 'المطابقة',
+    'audit' => 'سجل التدقيق',
     'settings' => 'الإعدادات',
 ];

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\CounterpartyController;
 use App\Http\Controllers\CounterpartyStatementController;
 use App\Http\Controllers\CurrencyController;
@@ -57,6 +58,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('reconciliations', [ReconciliationController::class, 'store'])->name('reconciliations.store');
     Route::post('reconciliations/{reconciliation}/resolve', [ReconciliationController::class, 'resolve'])
         ->name('reconciliations.resolve');
+
+    // The trail has been written since Phase 1; this is the first way to read it.
+    Route::get('audit', [AuditLogController::class, 'index'])->name('audit.index');
 
     // Everything the ledger posts except an exchange: credit in and out, lending and
     // borrowing, settlements, transfers, fees and expenses.

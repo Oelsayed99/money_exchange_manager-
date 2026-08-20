@@ -54,6 +54,16 @@ enum Permission: string
      */
     case ManageReconciliations = 'reconciliations.manage';
 
+    /**
+     * Read the audit trail.
+     *
+     * Deliberately not given to operators or viewers. The trail carries IP addresses,
+     * user agents and the before-and-after of every change including other people's —
+     * it is a record *about* the people using the system, and reading it is a
+     * different kind of act from reading the ledger.
+     */
+    case ViewAudit = 'audit.view';
+
     /** @return list<string> */
     public static function values(): array
     {

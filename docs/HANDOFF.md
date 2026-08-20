@@ -103,10 +103,10 @@ Recorded so they are not retried:
 | 3 Transactions & ledger | ✅ drafts, legs, posting rules (17 of 19 wired), posting service, entries, confirmed/available, idempotency, reversals, rebuild/verify, real concurrency test |
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
-| 6 Export & reconciliation | 🚧 CSV export and reconciliation done; xlsx and audit improvements outstanding |
+| 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
 | 7 Quality & release | ❌ not started |
 
-**Tests: 762 backend (1,904 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 778 backend (1,989 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -175,9 +175,12 @@ The owner restated the product in their own words on 2026-08-18, and it maps to 
 
 9. ✅ **Recording movements.** `GET /movements`. Every type the ledger supports except exchange and reversal, with the counterparty's four positions shown live and the negative-credit warning finally built. See ADR 0015.
 
+10. ✅ **Audit trail screen.** `GET /audit`, administrators only. The trail was written since Phase 1 and readable from nowhere. See ADR 0016.
+
 Remaining in Phase 6:
-- **A spreadsheet (xlsx) writer.** Slots in beside `CsvWriter` against the same `Exportable`; needs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet). Worth checking the owner actually wants it — Excel opens the CSVs correctly, BOM and all.
-- **Audit improvements** — scope not pinned down; the audit trail from Phase 1.5 works. Candidates: an audit-log screen, and recording reads of profit figures.
+- **A spreadsheet (xlsx) writer** — the only item left, and **the owner has not confirmed they want it**. It slots in beside `CsvWriter` against the same `Exportable`, but costs a dependency (openspout is the lean choice; maatwebsite/excel pulls in PhpSpreadsheet) for a format the CSVs already cover — Excel opens them correctly, Arabic included, because of the BOM. Ask before building.
+
+Then **Phase 7 — quality and release**: complete automated testing, accessibility review, security review, performance review, Arabic/RTL review, deployment and backup documentation. Worth doing early in it: burn down the **20 inherited PHPStan baseline errors**, and either use Playwright or remove it.
 
 Then Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
