@@ -23,3 +23,6 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+
+# Database backups. Every figure in the business, in one file — never in the repository.
+/storage/backups

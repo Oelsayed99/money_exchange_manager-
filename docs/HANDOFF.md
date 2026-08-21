@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline cleared, route guard test in place; reviews and docs outstanding |
+| 7 Quality & release | 🚧 baseline cleared, route guard test, backup/recovery; reviews and remaining docs outstanding |
 
-**Tests: 788 backend (1,999 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 807 backend (2,026 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -141,6 +141,7 @@ Recorded so they are not retried:
 - Git: SSH already authenticated as `Oelsayed99`. Commit email corrected to `oelsayed314@gmail.com` (was `gmaill.com`, a typo — the owner's three other repos still carry it in history).
 - `gh` CLI is **not** installed.
 - Owner runs macOS; `brew`-installed MySQL; no Docker.
+- **Backups:** `php artisan db:backup --verify` writes to `storage/backups` (gitignored, 0600). Same disk as the database — offsite copies are the owner's to arrange. See `docs/BACKUP.md`.
 
 ---
 
@@ -185,7 +186,11 @@ Remaining in Phase 6:
 11. ✅ **Static-analysis baseline cleared.** Level 8 with nothing exempted; the last baselined entry was hiding a broken contract. See ADR 0017.
 12. ✅ **Route guard test.** Every route is authenticated or listed as public with a reason; unused file-serving routes removed. See ADR 0018.
 
-Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, deployment documentation, **backup and recovery documentation** (the owner has real data on a laptop with no backup — arguably the most urgent item in the phase), and either using Playwright or removing it.
+13. ✅ **Backup and recovery.** `db:backup --verify` and `db:restore`, plus `docs/BACKUP.md`. Verification caught that every backup would have been unrestorable. See ADR 0019.
+
+Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, deployment documentation, and either using Playwright or removing it.
+
+**Ask the owner to set up the crontab line in `docs/BACKUP.md` and to copy backups off the machine.** Both are theirs to do; the tooling cannot.
 
 Then Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
