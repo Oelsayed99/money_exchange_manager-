@@ -43,50 +43,45 @@ backup is evidence about what went wrong; deleting it destroys that.
 
 ### Every day, without remembering
 
-**On this machine (macOS), use launchd — not cron.**
+**This is for the production server.** It is where the real ledger lives and the only
+place a lost database costs anything.
 
-cron does not run a job it slept through, and this is a laptop that is asleep at two in
-the morning. A cron entry would look installed and never fire once. launchd runs a
-missed job when the machine next wakes, which is the behaviour actually wanted.
-
-```bash
-cp deploy/com.finance.backup.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.finance.backup.plist
-```
-
-Then **prove it works now**, rather than finding out tomorrow:
+`crontab -e` opens the server's list of scheduled jobs; each line is one job. Note the
+directory change — cron does not start in the project directory, and without it the job
+fails every night with `Could not open input file: artisan`, into a log nobody reads:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.finance.backup
+0 2 * * * cd /srv/finance && /usr/bin/php artisan db:backup --verify >> storage/logs/backup.log 2>&1
 ```
 
-```bash
-tail storage/logs/backup.log
-```
+Adjust both paths to wherever the application is deployed.
 
-You are looking for `Verified: the backup restores and the ledger balances.`
+**Check the log sometimes.** A backup job failing quietly for three months is worse
+than no backup job, because you believed in it. `tail storage/logs/backup.log`.
 
-To stop it: `launchctl bootout gui/$(id -u)/com.finance.backup`
+#### On a development machine
 
-#### On a server that is always on
+You almost certainly do not want this. A laptop holds test data that can be recreated
+by re-running the seeders, and backing it up nightly protects nothing.
 
-There, cron is fine. `crontab -e` opens your personal schedule file; each line is one
-job. Note the `cd` — cron does not start in the project directory, and without it the
-job fails every night with `Could not open input file: artisan`:
+Two exceptions, both worth knowing:
 
-```bash
-0 2 * * * cd /Users/omarelsayed/Finance && /opt/homebrew/bin/php artisan db:backup --verify >> storage/logs/backup.log 2>&1
-```
+- **If you have typed real client balances into a development machine while trying the
+  application out**, that data is real whatever the machine is called. Take a manual
+  backup — `php artisan db:backup` — or accept that you will retype it.
+- **Practising a restore is exactly what a development machine is for.** See
+  [Checking a backup without touching anything](#checking-a-backup-without-touching-anything).
 
-#### Either way, check the log sometimes
+If you do want a schedule on a Mac, use launchd rather than cron: cron does not run a
+job it slept through, and a laptop is asleep at two in the morning, so a cron entry
+there would look installed and never fire once. `deploy/com.finance.backup.plist` is a
+ready-made job — its paths are hardcoded to one machine, so read it before installing.
 
-A backup job that has been failing quietly for three months is worse than no backup
-job, because you believed in it. `tail storage/logs/backup.log` occasionally.
-
-### Getting the backups off this machine
+### Getting the backups off the server
 
 The command writes to `storage/backups`, which is on the same disk as the database it
-is protecting. A disk failure takes both.
+is protecting. A disk failure takes both, and a server is not special in this respect —
+a single cloud instance is one machine.
 
 Copy them somewhere else — an external drive, another machine, a cloud folder:
 
@@ -152,6 +147,9 @@ the tables. Nobody at the counter waits for it.
 - The application code — that is in git
 
 ## If the worst happens
+
+Rebuilding from nothing. See `docs/DEPLOYMENT.md` for a first-time install; this is the
+short version aimed at getting the ledger back.
 
 1. Get a machine with PHP 8.3+, MySQL 9 and Node.
 2. `git clone` the repository.

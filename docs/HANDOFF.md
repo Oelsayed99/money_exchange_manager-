@@ -190,7 +190,7 @@ Remaining in Phase 6:
 
 Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, deployment documentation, and either using Playwright or removing it.
 
-**Ask the owner to set up the crontab line in `docs/BACKUP.md` and to copy backups off the machine.** Both are theirs to do; the tooling cannot.
+**The nightly schedule belongs on the production server, not the owner's Mac.** The local database holds test data only (1 counterparty, 16 transactions); backing it up nightly protects nothing, and the owner said so. `docs/BACKUP.md` is now written server-first. Deployment is the next thing it depends on.
 
 Then Phase 7 (quality and release). Worth pulling forward: **burning down the PHPStan baseline** (20 inherited errors) and either using or removing Playwright.
 
