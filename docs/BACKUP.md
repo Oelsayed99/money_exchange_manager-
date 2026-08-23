@@ -75,7 +75,7 @@ job. Note the `cd` — cron does not start in the project directory, and without
 job fails every night with `Could not open input file: artisan`:
 
 ```bash
-0 2 * * * /opt/homebrew/bin/php artisan db:backup --verify >> storage/logs/backup.log 2>&1
+0 2 * * * cd /Users/omarelsayed/Finance && /opt/homebrew/bin/php artisan db:backup --verify >> storage/logs/backup.log 2>&1
 ```
 
 #### Either way, check the log sometimes
