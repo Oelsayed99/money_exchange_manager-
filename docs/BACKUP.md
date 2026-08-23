@@ -43,15 +43,45 @@ backup is evidence about what went wrong; deleting it destroys that.
 
 ### Every day, without remembering
 
-Add this to your crontab (`crontab -e`), adjusting the path:
+**On this machine (macOS), use launchd — not cron.**
+
+cron does not run a job it slept through, and this is a laptop that is asleep at two in
+the morning. A cron entry would look installed and never fire once. launchd runs a
+missed job when the machine next wakes, which is the behaviour actually wanted.
+
+```bash
+cp deploy/com.finance.backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.finance.backup.plist
+```
+
+Then **prove it works now**, rather than finding out tomorrow:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.finance.backup
+```
+
+```bash
+tail storage/logs/backup.log
+```
+
+You are looking for `Verified: the backup restores and the ledger balances.`
+
+To stop it: `launchctl bootout gui/$(id -u)/com.finance.backup`
+
+#### On a server that is always on
+
+There, cron is fine. `crontab -e` opens your personal schedule file; each line is one
+job. Note the `cd` — cron does not start in the project directory, and without it the
+job fails every night with `Could not open input file: artisan`:
 
 ```bash
 0 2 * * * /opt/homebrew/bin/php artisan db:backup --verify >> storage/logs/backup.log 2>&1
 ```
 
-Then **check `storage/logs/backup.log` occasionally**. A backup job that has been
-failing quietly for three months is worse than no backup job, because you believed in
-it.
+#### Either way, check the log sometimes
+
+A backup job that has been failing quietly for three months is worse than no backup
+job, because you believed in it. `tail storage/logs/backup.log` occasionally.
 
 ### Getting the backups off this machine
 

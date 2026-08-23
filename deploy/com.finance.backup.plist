@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Nightly verified backup, scheduled by launchd rather than cron.
+
+    cron does not run a job it slept through, and this machine is a laptop that is
+    asleep at two in the morning — a cron entry here would simply never fire, and
+    would look installed. launchd runs a missed StartCalendarInterval job when the
+    machine next wakes, which is the behaviour actually wanted.
+
+    WorkingDirectory is required: artisan is only findable from the project root.
+
+    Install:
+      cp deploy/com.finance.backup.plist ~/Library/LaunchAgents/
+      launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.finance.backup.plist
+
+    Run it now, to prove it works rather than waiting until tomorrow:
+      launchctl kickstart -k gui/$(id -u)/com.finance.backup
+      tail storage/logs/backup.log
+
+    Remove:
+      launchctl bootout gui/$(id -u)/com.finance.backup
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.finance.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/php</string>
+        <string>artisan</string>
+        <string>db:backup</string>
+        <string>--verify</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/omarelsayed/Finance</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/omarelsayed/Finance/storage/logs/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/omarelsayed/Finance/storage/logs/backup.log</string>
+</dict>
+</plist>
