@@ -73,22 +73,24 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                 "owed to us" and "owed by us" are visibly different things
                                 rather than four columns of undifferentiated numbers. */}
                             <tr className="text-muted-foreground text-xs">
-                                <th className="px-4 pt-3" />
-                                <th className="px-4 pt-3" />
+                                <th scope="col" className="px-4 pt-3" />
+                                <th scope="col" className="px-4 pt-3" />
                                 <th
+                                    scope="col"
                                     className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 pt-3 text-center font-medium"
                                     colSpan={2}
                                 >
                                     {t('counterparties.assets')}
                                 </th>
                                 <th
+                                    scope="col"
                                     className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 pt-3 text-center font-medium"
                                     colSpan={2}
                                 >
                                     {t('counterparties.liabilities')}
                                 </th>
-                                <th className="px-4 pt-3" />
-                                <th className="px-4 pt-3" />
+                                <th scope="col" className="px-4 pt-3" />
+                                <th scope="col" className="px-4 pt-3" />
                             </tr>
                             <tr className="text-muted-foreground">
                                 <th scope="col" className="px-4 py-3 text-start font-medium">

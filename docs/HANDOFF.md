@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL review; accessibility and performance outstanding |
+| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL, accessibility; performance outstanding |
 
-**Tests: 810 backend (2,029 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 810 backend (2,029 assertions) + 59 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -190,7 +190,11 @@ Remaining in Phase 6:
 
 15. ✅ **Arabic and RTL review.** 131 untranslated strings — including all 121 validation messages — plus six hardcoded sign-in screens and a mobile close button on the wrong edge. See ADR 0020.
 
-Remaining in Phase 7: accessibility review, performance review, and either using Playwright or removing it.
+16. ✅ **Accessibility review.** Silent validation messages, no skip link, no `<main>` landmark, 26 unscoped headers. See ADR 0021.
+
+Remaining in Phase 7: performance review, and either using Playwright or removing it.
+
+Known and deliberately not done in 7.5: validation messages announce but are not associated with their fields (`aria-describedby` across ~100 inputs); the Recharts charts have no text alternative.
 
 **The Arabic translations have not been read by a native speaker.** They are mine, and the financial vocabulary in particular (أمانة / عهدة / مستحق) is worth the owner's eye.
 

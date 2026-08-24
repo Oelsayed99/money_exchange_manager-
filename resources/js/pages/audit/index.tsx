@@ -180,10 +180,18 @@ export default function AuditIndex({ logs, filters, options }: Props) {
                     <table className="w-full min-w-3xl text-sm">
                         <thead className="bg-muted/50 text-muted-foreground">
                             <tr>
-                                <th className="p-2 text-start font-medium">{t('audit.columns.when')}</th>
-                                <th className="p-2 text-start font-medium">{t('audit.columns.who')}</th>
-                                <th className="p-2 text-start font-medium">{t('audit.columns.what')}</th>
-                                <th className="p-2 text-start font-medium">{t('audit.columns.change')}</th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('audit.columns.when')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('audit.columns.who')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('audit.columns.what')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('audit.columns.change')}
+                                </th>
                             </tr>
                         </thead>
 

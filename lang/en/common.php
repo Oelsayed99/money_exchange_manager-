@@ -16,4 +16,5 @@ return [
     'status' => 'Status',
     'currency' => 'Currency',
     'export_csv' => 'Download CSV',
+    'skip_to_content' => 'Skip to content',
 ];

@@ -194,10 +194,14 @@ export default function AccountFormPage({ account, accountTypes, availableCurren
 
                                     {held !== undefined && (
                                         <div className="flex-1">
+                                            {/* One of these per currency, so a shared
+                                                visible label cannot identify them; the
+                                                currency code is what tells them apart. */}
                                             <MoneyInput
                                                 value={held.opening_balance}
                                                 onChange={(amount) => setBalance(currency.id, amount)}
                                                 currency={currency.code}
+                                                aria-label={`${t('accounts.fields.opening_balance')} — ${currency.code}`}
                                             />
                                         </div>
                                     )}

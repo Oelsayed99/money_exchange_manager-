@@ -105,7 +105,7 @@ export default function Register() {
                     </div>
 
                     <Button type="submit" className="mt-2 w-full" tabIndex={5} disabled={processing}>
-                        {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                        {processing && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
                         {t('auth.register.submit')}
                     </Button>
                 </div>

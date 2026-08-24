@@ -16,4 +16,5 @@ return [
     'status' => 'الحالة',
     'currency' => 'العملة',
     'export_csv' => 'تنزيل CSV',
+    'skip_to_content' => 'تخطَّ إلى المحتوى',
 ];

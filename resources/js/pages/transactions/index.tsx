@@ -226,12 +226,24 @@ export default function TransactionsIndex({ transactions, filters, options }: Pr
                     <table className="w-full min-w-3xl text-sm">
                         <thead className="bg-muted/50 text-muted-foreground">
                             <tr>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.date')}</th>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.type')}</th>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.counterparty')}</th>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.movement')}</th>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.reference')}</th>
-                                <th className="p-2 text-start font-medium">{t('transactions.list.columns.status')}</th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.date')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.type')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.counterparty')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.movement')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.reference')}
+                                </th>
+                                <th scope="col" className="p-2 text-start font-medium">
+                                    {t('transactions.list.columns.status')}
+                                </th>
                             </tr>
                         </thead>
 

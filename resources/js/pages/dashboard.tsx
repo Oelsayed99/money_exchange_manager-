@@ -204,10 +204,16 @@ export default function Dashboard({ dashboard, filters, options }: Props) {
                                 <table className="w-full min-w-2xl text-sm">
                                     <thead className="bg-muted/50 text-muted-foreground">
                                         <tr>
-                                            <th className="p-2 text-start font-medium">{t('dashboard.parties.name')}</th>
-                                            <th className="p-2 text-start font-medium">{t('dashboard.parties.status')}</th>
-                                            <th className="p-2 text-start font-medium">{t('dashboard.parties.positions')}</th>
-                                            <th className="p-2" />
+                                            <th scope="col" className="p-2 text-start font-medium">
+                                                {t('dashboard.parties.name')}
+                                            </th>
+                                            <th scope="col" className="p-2 text-start font-medium">
+                                                {t('dashboard.parties.status')}
+                                            </th>
+                                            <th scope="col" className="p-2 text-start font-medium">
+                                                {t('dashboard.parties.positions')}
+                                            </th>
+                                            <th scope="col" className="p-2" />
                                         </tr>
                                     </thead>
                                     <tbody>

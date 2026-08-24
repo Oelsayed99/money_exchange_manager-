@@ -218,16 +218,26 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                             <table className="w-full min-w-3xl text-sm">
                                 <thead className="bg-muted/50 text-muted-foreground">
                                     <tr>
-                                        <th className="p-2 text-start font-medium">{t('statements.columns.date')}</th>
-                                        <th className="p-2 text-start font-medium">{t('statements.columns.details')}</th>
-                                        <th className="p-2 text-end font-medium" title={t('statements.in_hint')}>
+                                        <th scope="col" className="p-2 text-start font-medium">
+                                            {t('statements.columns.date')}
+                                        </th>
+                                        <th scope="col" className="p-2 text-start font-medium">
+                                            {t('statements.columns.details')}
+                                        </th>
+                                        <th scope="col" className="p-2 text-end font-medium" title={t('statements.in_hint')}>
                                             {t('statements.columns.in')}
                                         </th>
-                                        <th className="p-2 text-end font-medium" title={t('statements.out_hint')}>
+                                        <th scope="col" className="p-2 text-end font-medium" title={t('statements.out_hint')}>
                                             {t('statements.columns.out')}
                                         </th>
-                                        <th className="p-2 text-end font-medium">{t('statements.columns.position')}</th>
-                                        {internal && <th className="p-2 text-end font-medium">{t('statements.columns.profit')}</th>}
+                                        <th scope="col" className="p-2 text-end font-medium">
+                                            {t('statements.columns.position')}
+                                        </th>
+                                        {internal && (
+                                            <th scope="col" className="p-2 text-end font-medium">
+                                                {t('statements.columns.profit')}
+                                            </th>
+                                        )}
                                     </tr>
                                 </thead>
 
