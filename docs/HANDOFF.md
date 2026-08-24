@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment docs; reviews outstanding |
+| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL review; accessibility and performance outstanding |
 
-**Tests: 807 backend (2,026 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 810 backend (2,029 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -119,14 +119,12 @@ Recorded so they are not retried:
 - **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care. Numbering resumes at 0008 and is correct from there.
 - **`om.he.els@gmail.com` no longer exists** — destroyed by my `migrate:fresh`. Only `test@example.com` (administrator) remains.
 - **Playwright**: configured, no browsers, no e2e tests.
-- **Vendored `components/ui/**` still uses physical CSS properties** — RTL debt, exempted from lint.
 - **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
 - **An exchange settled in cash does not appear on the counterparty's statement**, even with the party recorded on the transaction, because no entry touches their accounts. Correct by design (ADR 0009) but worth knowing before someone reports it as a bug.
 - **Drafts have no UI.** Service-level only.
 - ~~No way to record anything but an exchange~~ — fixed by the movements screen (ADR 0015).
 - **Validating a draft creates ledger accounts** it would use — documented trade-off, leaves empty accounts if discarded.
-- **Auth pages still hardcoded English** (they lay out correctly in RTL).
 - Owner edits on GitHub web UI have caused divergence once; resolved by rebase, not force-push.
 
 ---
@@ -190,7 +188,11 @@ Remaining in Phase 6:
 
 14. ✅ **Deployment documentation.** `docs/DEPLOYMENT.md`, written for a plain Ubuntu VPS — the owner's confirmed target. Declares the PHP extensions in `composer.json` so a server that cannot run this refuses to install it.
 
-Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, and either using Playwright or removing it.
+15. ✅ **Arabic and RTL review.** 131 untranslated strings — including all 121 validation messages — plus six hardcoded sign-in screens and a mobile close button on the wrong edge. See ADR 0020.
+
+Remaining in Phase 7: accessibility review, performance review, and either using Playwright or removing it.
+
+**The Arabic translations have not been read by a native speaker.** They are mine, and the financial vocabulary in particular (أمانة / عهدة / مستحق) is worth the owner's eye.
 
 **The nightly schedule belongs on the production server, not the owner's Mac.** The local database holds test data only (1 counterparty, 16 transactions); backing it up nightly protects nothing, and the owner said so. `docs/BACKUP.md` is now written server-first. Deployment is the next thing it depends on.
 

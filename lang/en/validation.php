@@ -195,6 +195,23 @@ return [
     |
     */
 
-    'attributes' => [],
+    /*
+     * Field names as they should read in a message, rather than as they are spelled in
+     * the database. Laravel humanises the rest — `decimal_places` already becomes
+     * "decimal places" — so only the ones it would get wrong are listed.
+     */
+    'attributes' => [
+        'code' => 'code',
+        'name' => 'name',
+        'name_ar' => 'Arabic name',
+        'symbol' => 'symbol',
+        'decimal_places' => 'decimal places',
+        'is_active' => 'status',
+        'sort_order' => 'display order',
+        'email' => 'email address',
+        'password' => 'password',
+        'name_field' => 'name',
+        'locale' => 'language',
+    ],
 
 ];

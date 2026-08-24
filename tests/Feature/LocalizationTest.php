@@ -163,11 +163,16 @@ describe('switching', function (): void {
 describe('fallback', function (): void {
     // Section 12 forbids hardcoded strings; it does not require every string to exist
     // in every language before a page can render. An untranslated key shows English.
+    // Previously demonstrated with auth.failed, which had no Arabic translation. It has
+    // one now — every string does — so the example is registered here instead. Proving
+    // fallback with a real gap would mean keeping a gap for the test's benefit.
     it('falls back to English for a key with no Arabic translation', function (): void {
+        app('translator')->addLines(['fallback.probe' => 'English only'], 'en');
+
         app()->setLocale('ar');
 
         expect(__('currencies.fields.code'))->toBe('الرمز')
-            ->and(__('auth.failed'))->toBe('These credentials do not match our records.');
+            ->and(__('fallback.probe'))->toBe('English only');
     });
 
     it('translates validation messages into Arabic', function (): void {
