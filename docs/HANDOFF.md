@@ -104,7 +104,7 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline cleared, route guard test, backup/recovery; reviews and remaining docs outstanding |
+| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment docs; reviews outstanding |
 
 **Tests: 807 backend (2,026 assertions) + 50 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
@@ -188,7 +188,9 @@ Remaining in Phase 6:
 
 13. ✅ **Backup and recovery.** `db:backup --verify` and `db:restore`, plus `docs/BACKUP.md`. Verification caught that every backup would have been unrestorable. See ADR 0019.
 
-Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, deployment documentation, and either using Playwright or removing it.
+14. ✅ **Deployment documentation.** `docs/DEPLOYMENT.md`, written for a plain Ubuntu VPS — the owner's confirmed target. Declares the PHP extensions in `composer.json` so a server that cannot run this refuses to install it.
+
+Remaining in Phase 7: accessibility review, Arabic/RTL review, performance review, and either using Playwright or removing it.
 
 **The nightly schedule belongs on the production server, not the owner's Mac.** The local database holds test data only (1 counterparty, 16 transactions); backing it up nightly protects nothing, and the owner said so. `docs/BACKUP.md` is now written server-first. Deployment is the next thing it depends on.
 
