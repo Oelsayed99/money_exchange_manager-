@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Domain\Money\Decimal;
+use App\Domain\Money\Money;
 use App\Domain\Reconciliation\ReconciliationService;
 use App\Enums\ReconciliationStatus;
 use App\Models\Account;
@@ -56,8 +57,11 @@ final class ReconciliationController extends Controller
             ->limit(200)
             ->get();
 
+        // Drift for the whole page in one query rather than one per row.
+        $drift = $this->reconciliations->driftFor($records);
+
         return Inertia::render('reconciliations/index', [
-            'reconciliations' => $records->map(fn (Reconciliation $r): array => $this->present($r))->all(),
+            'reconciliations' => $records->map(fn (Reconciliation $r): array => $this->present($r, $drift[$r->id] ?? null))->all(),
             'filters' => [
                 'account' => isset($validated['account']) ? (int) $validated['account'] : null,
                 'currency' => $validated['currency'] ?? null,
@@ -164,11 +168,11 @@ final class ReconciliationController extends Controller
         return back()->with('success', __('reconciliations.resolved'));
     }
 
-    /** @return array<string, mixed> */
-    private function present(Reconciliation $reconciliation): array
+    /** @param  Money|null  $drift  null when the ledger has not moved since the count
+     * @return array<string, mixed>
+     */
+    private function present(Reconciliation $reconciliation, ?Money $drift): array
     {
-        $drift = $this->reconciliations->drift($reconciliation);
-
         return [
             'id' => $reconciliation->id,
             'as_of' => $reconciliation->as_of->toDateString(),
@@ -186,9 +190,9 @@ final class ReconciliationController extends Controller
             'resolved_by' => $reconciliation->resolver?->name,
             'resolved_at' => $reconciliation->resolved_at?->toDateString(),
             'adjustment_transaction_id' => $reconciliation->adjustment_transaction_id,
-            // Non-zero means something dated on or before this day was posted after the
+            // Present means something dated on or before this day was posted after the
             // count: the reconciliation no longer describes the ledger.
-            'drift' => $drift->isZero() ? null : $drift->jsonSerialize(),
+            'drift' => $drift?->jsonSerialize(),
         ];
     }
 

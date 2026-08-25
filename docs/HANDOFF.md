@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL, accessibility; performance outstanding |
+| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL, accessibility, performance; Playwright decision outstanding |
 
-**Tests: 810 backend (2,029 assertions) + 59 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 823 backend (2,068 assertions) + 59 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -192,7 +192,9 @@ Remaining in Phase 6:
 
 16. ✅ **Accessibility review.** Silent validation messages, no skip link, no `<main>` landmark, 26 unscoped headers. See ADR 0021.
 
-Remaining in Phase 7: performance review, and either using Playwright or removing it.
+17. ✅ **Performance review.** Two caches that were never registered as singletons, a per-row drift query, and four queries where one would do. See ADR 0022.
+
+Remaining in Phase 7: **decide Playwright's fate** — configured since Phase 1, no browsers installed, zero e2e tests. Either write the handful the assessment asks for (exchange with live preview, credit deposit → settlement, language switch preserving filters, profit-hidden export) or remove it and stop implying coverage that does not exist.
 
 Known and deliberately not done in 7.5: validation messages announce but are not associated with their fields (`aria-describedby` across ~100 inputs); the Recharts charts have no text alternative.
 

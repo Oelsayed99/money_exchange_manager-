@@ -20,6 +20,7 @@ use Database\Seeders\CurrencySeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
     $this->seed(RolePermissionSeeder::class);
@@ -236,6 +237,71 @@ describe('drift', function (): void {
         deposited('250', '2026-07-15');
 
         expect($this->service->drift($record)->isZero())->toBeTrue();
+    });
+});
+
+/*
+ * The batched drift query duplicates arithmetic the single-row version reads from the
+ * account's kind. Duplication that cannot be avoided can at least be watched.
+ */
+describe('drift in bulk', function (): void {
+    it('agrees with the one-at-a-time answer, row for row', function (): void {
+        deposited('1000', '2026-06-01');
+        $first = count_('1000', '2026-06-30');
+
+        deposited('400', '2026-07-02');
+        $second = count_('1500', '2026-07-31');
+
+        // Backdated into both periods, so both reconciliations have moved.
+        deposited('250', '2026-06-15');
+
+        $batch = $this->service->driftFor(Reconciliation::query()->get());
+
+        foreach ([$first, $second] as $record) {
+            $single = $this->service->drift($record->refresh());
+
+            expect(($batch[$record->id] ?? null)?->toDisplayString() ?? '0.00')
+                ->toBe($single->isZero() ? '0.00' : $single->toDisplayString());
+        }
+    });
+
+    it('says nothing for a reconciliation the ledger has not moved past', function (): void {
+        deposited('1000', '2026-06-01');
+        $record = count_('1000');
+
+        expect($this->service->driftFor(Reconciliation::query()->get()))->not->toHaveKey($record->id);
+    });
+
+    // One query for the drift, plus the currency registry's single load. What matters
+    // is that neither grows: this used to be one query per row.
+    it('asks the database the same number of times however many rows there are', function (): void {
+        deposited('1000', '2026-06-01');
+
+        $count = function (): int {
+            $queries = 0;
+            DB::listen(function () use (&$queries): void {
+                $queries++;
+            });
+
+            $this->service->driftFor(Reconciliation::query()->get());
+
+            return $queries;
+        };
+
+        $this->service->record($this->safe, $this->egp, Carbon::parse('2026-06-02'), $this->egp->money('999'));
+        $one = $count();
+
+        foreach (range(3, 12) as $day) {
+            $this->service->record(
+                $this->safe,
+                $this->egp,
+                Carbon::parse('2026-06-'.str_pad((string) $day, 2, '0', STR_PAD_LEFT)),
+                $this->egp->money('999'),
+            );
+        }
+
+        expect($count())->toBe($one)
+            ->and(Reconciliation::query()->count())->toBe(11);
     });
 });
 

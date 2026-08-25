@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace App\Domain\Reconciliation;
 
 use App\Domain\Ledger\LedgerAccountResolver;
+use App\Domain\Money\CurrencyRegistry;
+use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
 use App\Enums\EntryDirection;
+use App\Enums\LedgerAccountSubkind;
+use App\Enums\LedgerOwnerType;
 use App\Enums\ReconciliationStatus;
 use App\Models\Account;
 use App\Models\Currency;
@@ -15,6 +19,7 @@ use App\Models\Reconciliation;
 use App\Models\User;
 use DomainException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -37,7 +42,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class ReconciliationService
 {
-    public function __construct(private readonly LedgerAccountResolver $accounts) {}
+    public function __construct(
+        private readonly LedgerAccountResolver $accounts,
+        private readonly CurrencyRegistry $currencies,
+    ) {}
 
     /**
      * What the ledger says an account held in one currency at the close of a day.
@@ -152,6 +160,69 @@ final class ReconciliationService
         ]);
 
         return $reconciliation->refresh();
+    }
+
+    /**
+     * Drift for many reconciliations at once.
+     *
+     * {@see drift} answers for one, which is one query, which on a list of two hundred
+     * is two hundred queries. This answers for all of them in one, by joining each row
+     * to its own cash account and summing the entries dated on or before its own day.
+     *
+     * The direction arithmetic is spelled out in SQL here and read from the account's
+     * kind in the single-row version, which is a duplication worth watching — so a test
+     * asserts the two agree for every row it is given.
+     *
+     * @param  Collection<int, Reconciliation>  $reconciliations
+     * @return array<int, Money> keyed by reconciliation id; absent means no drift
+     */
+    public function driftFor(Collection $reconciliations): array
+    {
+        if ($reconciliations->isEmpty()) {
+            return [];
+        }
+
+        $rows = DB::table('reconciliations as r')
+            ->join('ledger_accounts as a', function ($join): void {
+                $join->on('a.owner_id', '=', 'r.account_id')
+                    ->on('a.currency_id', '=', 'r.currency_id')
+                    ->where('a.owner_type', LedgerOwnerType::Account->value)
+                    ->where('a.subkind', LedgerAccountSubkind::Cash->value);
+            })
+            ->leftJoin('ledger_entries as e', function ($join): void {
+                // Everything up to the close of the day being reconciled. Expressed as
+                // "before the next day" so it does not depend on the precision of a
+                // timestamp.
+                $join->on('e.ledger_account_id', '=', 'a.id')
+                    ->whereRaw('e.occurred_at < DATE_ADD(r.as_of, INTERVAL 1 DAY)');
+            })
+            ->whereIn('r.id', $reconciliations->pluck('id')->all())
+            ->groupBy('r.id', 'r.currency_id', 'r.ledger_amount')
+            ->select([
+                'r.id',
+                'r.currency_id',
+                'r.ledger_amount',
+                // Cash is an asset: a debit increases it, a credit reduces it.
+                DB::raw("COALESCE(SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END), 0) as balance_now"),
+            ])
+            ->get();
+
+        $drift = [];
+
+        foreach ($rows as $row) {
+            $spec = $this->currencies->byId((int) $row->currency_id);
+
+            $now = Money::of(Decimal::truncateTo((string) $row->balance_now, Money::SCALE), $spec);
+            $recorded = Money::of((string) $row->ledger_amount, $spec);
+
+            $difference = $now->minus($recorded);
+
+            if (! $difference->isZero()) {
+                $drift[(int) $row->id] = $difference;
+            }
+        }
+
+        return $drift;
     }
 
     /**

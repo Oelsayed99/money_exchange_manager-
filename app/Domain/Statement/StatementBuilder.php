@@ -285,10 +285,16 @@ final class StatementBuilder
      */
     private function declaredOpening(Counterparty $counterparty, Currency $currency): array
     {
+        // One query for all four buckets. Asking per bucket was four queries to answer
+        // a question that is almost always "none".
+        $rows = $counterparty->openingBalances()
+            ->where('currency_id', $currency->getKey())
+            ->get();
+
         $declared = [];
 
         foreach (BalanceBucket::cases() as $bucket) {
-            $amount = $counterparty->openingBalance($bucket, $currency);
+            $amount = $rows->firstWhere('bucket', $bucket)?->amount;
 
             if ($amount !== null && ! $amount->isZero()) {
                 $declared[$bucket->value] = $amount;
