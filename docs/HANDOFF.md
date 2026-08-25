@@ -18,7 +18,7 @@ A multi-currency financial management application for a money-exchange business:
 
 ## 2. Stack (final, not to be reopened)
 
-Laravel 12.64 · PHP 8.5.7 · MySQL 9.6 · mPDF · React 19 + Inertia 2 · TypeScript strict · Tailwind 4 · shadcn/ui · Recharts (installed, unused) · Pest · Vitest + RTL · Playwright (configured, **no browsers installed, zero e2e tests**) · spatie/laravel-permission · Larastan level 8.
+Laravel 12.64 · PHP 8.5.7 · MySQL 9.6 · mPDF · React 19 + Inertia 2 · TypeScript strict · Tailwind 4 · shadcn/ui · Recharts (installed, unused) · Pest · Vitest + RTL · Playwright (13 e2e tests; `npm run test:e2e`) · spatie/laravel-permission · Larastan level 8.
 
 Recorded in `docs/adr/0001-frontend-architecture.md`. An earlier Livewire choice was superseded once Section 16 arrived.
 
@@ -104,9 +104,9 @@ Recorded so they are not retried:
 | 4 Exchange & profit | ✅ rates, spread, fees/expenses, live preview, exchange screen, profit visibility resolved |
 | 5 Dashboard & reports | ✅ rate-driven entry, statement, PDF, dashboard + charts, transaction list |
 | 6 Export & reconciliation | 🚧 CSV, reconciliation, movements, audit screen done; **xlsx is the only item left, and may not be wanted** |
-| 7 Quality & release | 🚧 baseline, route guard, backup/recovery, deployment, Arabic/RTL, accessibility, performance; Playwright decision outstanding |
+| 7 Quality & release | ✅ baseline, route guard, backup/recovery, deployment, Arabic/RTL, accessibility, performance, e2e |
 
-**Tests: 823 backend (2,068 assertions) + 59 frontend.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
+**Tests: 823 backend (2,068 assertions) + 59 frontend + 13 end-to-end.** PHPStan level 8, Pint, tsc, ESLint, Prettier all clean. `ledger:verify --transactions` clean.
 
 **Screens that exist:** login/register/settings, dashboard (placeholder), Currencies, Accounts, Counterparties, Exchange. All bilingual EN/AR with working RTL.
 
@@ -118,7 +118,6 @@ Recorded so they are not retried:
 
 - **Duplicate ADR numbers**: `0005-no-rounding` + `0005-audit-trail`, and `0006-roles-and-permissions` + `0006-accounts-and-the-money-cast`. Commit messages reference them, so renaming needs care. Numbering resumes at 0008 and is correct from there.
 - **`om.he.els@gmail.com` no longer exists** — destroyed by my `migrate:fresh`. Only `test@example.com` (administrator) remains.
-- **Playwright**: configured, no browsers, no e2e tests.
 - **No notes module** (Section 4 polymorphic notes) — deferred repeatedly; accounts and counterparties have no notes.
 - **Two transaction types unwired**: `CurrencyExchange` is handled by `ExchangeService` not `PostingRules` (by design); `Reversal` only via `PostingService::reverse()` (by design).
 - **An exchange settled in cash does not appear on the counterparty's statement**, even with the party recorded on the transaction, because no entry touches their accounts. Correct by design (ADR 0009) but worth knowing before someone reports it as a bug.
@@ -194,7 +193,15 @@ Remaining in Phase 6:
 
 17. ✅ **Performance review.** Two caches that were never registered as singletons, a per-row drift query, and four queries where one would do. See ADR 0022.
 
-Remaining in Phase 7: **decide Playwright's fate** — configured since Phase 1, no browsers installed, zero e2e tests. Either write the handful the assessment asks for (exchange with live preview, credit deposit → settlement, language switch preserving filters, profit-hidden export) or remove it and stop implying coverage that does not exist.
+18. ✅ **End-to-end tests.** The four flows the assessment names, in a real browser against a real database. See ADR 0023.
+
+**All seven phases are complete.**
+
+Worth knowing before the next session:
+- The Arabic has still not been read by a native speaker (ADR 0020).
+- No screen reader has been used, and the charts have no text alternative (ADR 0021).
+- No load testing; `ledger:rebuild` is unbounded (ADR 0022).
+- Two usability findings from the e2e work, neither yet acted on: the cost rate is per unit *delivered* and reads unnaturally when buying, and the movements form defaults to the first currency rather than one the chosen client holds.
 
 Known and deliberately not done in 7.5: validation messages announce but are not associated with their fields (`aria-describedby` across ~100 inputs); the Recharts charts have no text alternative.
 

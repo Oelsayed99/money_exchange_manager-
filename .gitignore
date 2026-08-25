@@ -26,3 +26,9 @@ yarn-error.log
 
 # Database backups. Every figure in the business, in one file — never in the repository.
 /storage/backups
+
+# Playwright: browsers, traces and screenshots from failed runs.
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
