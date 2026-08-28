@@ -25,11 +25,15 @@ use App\Models\Transaction;
  * cannot drift when rates move later.
  *
  * Worth stating because it is the reason the clearing accounts exist at all: once the
- * profit entry is made, `fx_position` in the received currency holds exactly the cost
- * value, and `fx_position` in the delivered currency holds the delivered amount. Valued
- * at the cost rate those are the same number, so the pair nets to zero. A non-zero
- * residual across all deals means an unrecognised or mis-stated margin — a standing
- * correctness check rather than plumbing.
+ * profit entry is made, `fx_position` on the margin side holds the other leg valued at
+ * the cost rate, and `fx_position` on the other side holds that leg as it stands.
+ * Valued at the cost rate those are the same number, so the pair nets to zero. A
+ * non-zero residual across all deals means an unrecognised or mis-stated margin — a
+ * standing correctness check rather than plumbing.
+ *
+ * Which side is the margin side is the deal's, not this class's: see MarginBasis. The
+ * profit, the fees, the expenses and the commissions all follow it, because they are
+ * all denominated in the currency the margin was measured in.
  */
 final class ExchangeService
 {
@@ -87,21 +91,24 @@ final class ExchangeService
             EntryDraft::credit($deliveredCash, $input->deliveredAmount),
         ];
 
-        $entries = [...$entries, ...$this->profitEntries($input, $breakdown, $fxReceived)];
+        $fxMargin = $input->marginCameIn() ? $fxReceived : $fxDelivered;
+        $marginCash = $input->marginCameIn() ? $receivedCash : $deliveredCash;
 
-        return [...$entries, ...$this->costEntries($input, $breakdown, $receivedCash)];
+        $entries = [...$entries, ...$this->profitEntries($input, $breakdown, $fxMargin)];
+
+        return [...$entries, ...$this->costEntries($input, $breakdown, $marginCash)];
     }
 
     /**
-     * Recognise the margin, in the received currency.
+     * Recognise the margin, in the currency it was measured in.
      *
-     * Self-balancing within that currency, so the invariant holds. A loss is the same
-     * entry with the sides exchanged — entries are always positive, and the direction
-     * carries the sign.
+     * Self-balancing within that currency, so the invariant holds whichever leg carries
+     * it. A loss is the same entry with the sides exchanged — entries are always
+     * positive, and the direction carries the sign.
      *
      * @return list<EntryDraft>
      */
-    private function profitEntries(ExchangeInput $input, ProfitBreakdown $breakdown, LedgerAccount $fxReceived): array
+    private function profitEntries(ExchangeInput $input, ProfitBreakdown $breakdown, LedgerAccount $fxMargin): array
     {
         $gross = $breakdown->grossProfit;
 
@@ -109,11 +116,11 @@ final class ExchangeService
             return [];
         }
 
-        $profit = $this->accounts->system(LedgerAccountSubkind::TradingProfit, $input->receivedCurrency);
+        $profit = $this->accounts->system(LedgerAccountSubkind::TradingProfit, $input->profitCurrency());
 
         return $gross->isPositive()
-            ? [EntryDraft::debit($fxReceived, $gross), EntryDraft::credit($profit, $gross)]
-            : [EntryDraft::debit($profit, $gross->absolute()), EntryDraft::credit($fxReceived, $gross->absolute())];
+            ? [EntryDraft::debit($fxMargin, $gross), EntryDraft::credit($profit, $gross)]
+            : [EntryDraft::debit($profit, $gross->absolute()), EntryDraft::credit($fxMargin, $gross->absolute())];
     }
 
     /**
@@ -121,32 +128,33 @@ final class ExchangeService
      *
      * @return list<EntryDraft>
      */
-    private function costEntries(ExchangeInput $input, ProfitBreakdown $breakdown, LedgerAccount $receivedCash): array
+    private function costEntries(ExchangeInput $input, ProfitBreakdown $breakdown, LedgerAccount $marginCash): array
     {
+        $currency = $input->profitCurrency();
         $entries = [];
 
         if ($breakdown->feesCharged->isPositive()) {
-            $entries[] = EntryDraft::debit($receivedCash, $breakdown->feesCharged);
+            $entries[] = EntryDraft::debit($marginCash, $breakdown->feesCharged);
             $entries[] = EntryDraft::credit(
-                $this->accounts->system(LedgerAccountSubkind::FeesIncome, $input->receivedCurrency),
+                $this->accounts->system(LedgerAccountSubkind::FeesIncome, $currency),
                 $breakdown->feesCharged,
             );
         }
 
         if ($breakdown->expenses->isPositive()) {
             $entries[] = EntryDraft::debit(
-                $this->accounts->system(LedgerAccountSubkind::Expense, $input->receivedCurrency),
+                $this->accounts->system(LedgerAccountSubkind::Expense, $currency),
                 $breakdown->expenses,
             );
-            $entries[] = EntryDraft::credit($receivedCash, $breakdown->expenses);
+            $entries[] = EntryDraft::credit($marginCash, $breakdown->expenses);
         }
 
         if ($breakdown->commissions->isPositive()) {
             $entries[] = EntryDraft::debit(
-                $this->accounts->system(LedgerAccountSubkind::CommissionExpense, $input->receivedCurrency),
+                $this->accounts->system(LedgerAccountSubkind::CommissionExpense, $currency),
                 $breakdown->commissions,
             );
-            $entries[] = EntryDraft::credit($receivedCash, $breakdown->commissions);
+            $entries[] = EntryDraft::credit($marginCash, $breakdown->commissions);
         }
 
         return $entries;
@@ -183,7 +191,13 @@ final class ExchangeService
         ] as [$role, $amount]) {
             // Always a Money on a breakdown; zero simply means there was none.
             if ($amount->isPositive()) {
-                $legs[] = new LegDraft($role, $amount, $input->receivedCurrency->id, $input->receivedInto->id, $input->counterparty?->id);
+                $legs[] = new LegDraft(
+                    $role,
+                    $amount,
+                    $input->profitCurrency()->id,
+                    $input->marginAccount()->id,
+                    $input->counterparty?->id,
+                );
             }
         }
 
@@ -207,6 +221,7 @@ final class ExchangeService
                 ? ProfitStatus::Finalised
                 : ProfitStatus::Estimated,
             'profit_currency_id' => $input->profitCurrency()->id,
+            'margin_basis' => $input->marginBasis,
             'customer_rate' => $breakdown->customerRate,
             'cost_rate' => $breakdown->costRate,
             'profit_value' => $input->profitValue,

@@ -13,19 +13,30 @@ use DomainException;
 /**
  * Works out the profit on an exchange, and shows how.
  *
- * Section 3's formulas, applied literally:
+ * Section 3's formulas, stated against whichever leg carries the margin:
  *
- *     Customer Value = Delivered × Customer Rate
- *     Cost Value     = Delivered × Cost Rate
- *     Gross Profit   = Customer Value − Cost Value
+ *     Customer Value = the margin leg, exactly as it happened
+ *     Cost Value     = the other leg × Cost Rate
+ *     Gross Profit   = Customer Value − Cost Value, or the reverse
  *     Net Profit     = Gross + Fees Charged − Expenses − External Commissions
+ *
+ * Section 3 writes the first three against the delivered leg, which is right for a sale
+ * — the currency going out is the one that cost something — and wrong for a purchase,
+ * where the margin is in the currency being paid out and the cost rate is per unit
+ * *received*. {@see MarginBasis}. The received basis is what Section 3 describes and
+ * remains the default.
+ *
+ * The direction of the subtraction follows the leg: money arriving in the margin
+ * currency means more of it is better, money leaving means less of it is.
  *
  * The customer rate is *derived* from the two amounts rather than entered, because the
  * amounts are what actually happened and the rate is a description of them. Entering
  * both and hoping they agree invites a deal whose recorded rate does not match the
  * money that moved.
  *
- * Every figure is an exact decimal. Nothing here is a float and nothing rounds.
+ * Every figure is an exact decimal. Nothing here is a float, nothing rounds, and the
+ * cost rate is only ever multiplied — which is the reason the basis exists rather than
+ * a rule that turns the rate over.
  */
 final class ProfitCalculator
 {
@@ -33,14 +44,17 @@ final class ProfitCalculator
     {
         $profitSpec = $input->profitCurrency()->spec();
 
-        // What the customer effectively paid per unit of what they got.
-        $customerRate = $this->rateBetween($input->receivedAmount, $input->deliveredAmount);
+        // The deal's own rate, in the margin currency per unit of the other leg — the
+        // same terms as the cost rate, so the two are comparable without conversion.
+        $customerRate = $this->rateBetween($input->marginLeg(), $input->otherLeg());
 
-        $customerValue = $input->receivedAmount;
+        $customerValue = $input->marginLeg();
 
         [$costRate, $costValue] = $this->cost($input, $customerRate, $customerValue);
 
-        $gross = $customerValue->minus($costValue);
+        $gross = $input->marginCameIn()
+            ? $customerValue->minus($costValue)
+            : $costValue->minus($customerValue);
 
         $fees = $input->feesCharged ?? Money::zero($profitSpec);
         $expenses = $input->expenses ?? Money::zero($profitSpec);
@@ -85,18 +99,31 @@ final class ProfitCalculator
             ProfitMethod::PerUnit => $this->fromPerUnitMargin($input, $customerRate),
             ProfitMethod::Percentage => [
                 null,
-                $customerValue->minus($this->percentageOf($customerValue, $this->statedValue($input))),
+                $this->costYielding($input, $customerValue, $this->percentageOf($customerValue, $this->statedValue($input))),
             ],
 
             // The operator states the profit; the cost is whatever is left.
             ProfitMethod::FixedAmount, ProfitMethod::Manual => [
                 null,
-                $customerValue->minus($this->statedProfit($input)),
+                $this->costYielding($input, $customerValue, $this->statedProfit($input)),
             ],
 
             // Moving our own money. There is no margin, so cost equals value.
             ProfitMethod::None => [null, $customerValue],
         };
+    }
+
+    /**
+     * The cost value that would produce a given gross margin.
+     *
+     * The inverse of the subtraction in calculate(), so the two cannot disagree about
+     * which way round the margin leg sits.
+     */
+    private function costYielding(ExchangeInput $input, Money $customerValue, Money $gross): Money
+    {
+        return $input->marginCameIn()
+            ? $customerValue->minus($gross)
+            : $customerValue->plus($gross);
     }
 
     /**
@@ -118,7 +145,7 @@ final class ProfitCalculator
 
         return [
             $costRate,
-            $this->convert($input->deliveredAmount, $costRate, $input),
+            $this->convert($input->otherLeg(), $costRate, $input),
         ];
     }
 
@@ -133,12 +160,19 @@ final class ProfitCalculator
      */
     private function fromPerUnitMargin(ExchangeInput $input, string $customerRate): array
     {
+        $margin = $this->statedValue($input);
+
+        // Subtract when the margin currency came in — we paid less for it than we got
+        // — and add when it went out, where the gap runs the other way. Either way the
+        // gross works out as the margin times the other leg.
         $derived = Decimal::truncateTo(
-            bcsub($customerRate, $this->statedValue($input), Decimal::WORKING_SCALE),
+            $input->marginCameIn()
+                ? bcsub($customerRate, $margin, Decimal::WORKING_SCALE)
+                : bcadd($customerRate, $margin, Decimal::WORKING_SCALE),
             self::RATE_SCALE,
         );
 
-        return [$derived, $this->convert($input->deliveredAmount, $derived, $input)];
+        return [$derived, $this->convert($input->otherLeg(), $derived, $input)];
     }
 
     /**
@@ -183,21 +217,23 @@ final class ProfitCalculator
     }
 
     /**
-     * How many units of the received currency one unit of the delivered currency fetched.
+     * How many units of the margin currency one unit of the other leg fetched.
      *
      * Division, so it truncates rather than rounds — the one place precision is
-     * unavoidably lost, and it is lost at the twelfth decimal place of a rate.
+     * unavoidably lost, and it is lost at the twelfth decimal place of a rate. Note
+     * that this is the *derived* rate, describing money that has already moved. The
+     * cost rate is never divided; that is what the basis is for.
      *
      * @return numeric-string
      */
-    private function rateBetween(Money $received, Money $delivered): string
+    private function rateBetween(Money $margin, Money $other): string
     {
-        if ($delivered->isZero()) {
-            throw new DomainException('An exchange cannot deliver nothing; there would be no rate.');
+        if ($other->isZero()) {
+            throw new DomainException('An exchange cannot have a leg of nothing; there would be no rate.');
         }
 
         return Decimal::truncateTo(
-            bcdiv($received->toStorageString(), $delivered->toStorageString(), Decimal::WORKING_SCALE),
+            bcdiv($margin->toStorageString(), $other->toStorageString(), Decimal::WORKING_SCALE),
             self::RATE_SCALE,
         );
     }

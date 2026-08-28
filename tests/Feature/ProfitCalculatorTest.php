@@ -6,6 +6,7 @@ use App\Domain\Exchange\ExchangeInput;
 use App\Domain\Exchange\ProfitCalculator;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
+use App\Enums\MarginBasis;
 use App\Enums\ProfitMethod;
 use App\Models\Account;
 use App\Models\Currency;
@@ -39,6 +40,7 @@ function exchange(array $overrides = []): ExchangeInput
         deliveredFrom: $test->from,
         occurredAt: now(),
         profitMethod: $overrides['profitMethod'] ?? ProfitMethod::RateDifference,
+        marginBasis: $overrides['marginBasis'] ?? MarginBasis::Received,
         costRate: array_key_exists('costRate', $overrides) ? $overrides['costRate'] : '3.65',
         profitValue: $overrides['profitValue'] ?? null,
         feesCharged: $overrides['feesCharged'] ?? null,
@@ -296,5 +298,135 @@ describe('the breakdown is transportable', function (): void {
         expect($payload['delivered']['amount'])->toBe('1000.00')
             ->and($payload['received']['amount'])->toBe('3670.00')
             ->and($payload['cost_rate'])->toBe('3.65');
+    });
+});
+
+/**
+ * The margin on the other leg.
+ *
+ * An exchange can be entered as a sale of what leaves or a purchase of what arrives,
+ * and until now only the first was really supported: the cost rate was always per unit
+ * *delivered*, so buying 50,000 USD with pounds asked the operator for 0.019531 where
+ * they were thinking 51.20, and reported the margin in dollars.
+ *
+ * The fix is not to turn the rate over — that is division, and division into a figure
+ * the margin is derived from is where precision goes. It is to measure the margin on
+ * the other leg, where the same rate is applied by multiplication. ADR 0027.
+ */
+describe('which leg carries the margin', function (): void {
+    // Buy 50,000 USD for 2,560,000 EGP — 51.20 a dollar — when a dollar is worth 51.48.
+    function purchase(array $overrides = []): ExchangeInput
+    {
+        $test = test();
+
+        return new ExchangeInput(
+            receivedCurrency: $test->usd,
+            receivedAmount: $test->usd->money('50000'),
+            receivedInto: $test->into,
+            deliveredCurrency: $test->egp,
+            deliveredAmount: $overrides['deliveredAmount'] ?? $test->egp->money('2560000'),
+            deliveredFrom: $test->from,
+            occurredAt: now(),
+            profitMethod: $overrides['profitMethod'] ?? ProfitMethod::RateDifference,
+            marginBasis: MarginBasis::Delivered,
+            costRate: array_key_exists('costRate', $overrides) ? $overrides['costRate'] : '51.48',
+            profitValue: $overrides['profitValue'] ?? null,
+            feesCharged: $overrides['feesCharged'] ?? null,
+            expenses: $overrides['expenses'] ?? null,
+            commissions: $overrides['commissions'] ?? null,
+        );
+    }
+
+    it('states the rate the way the operator does, and earns the margin in pounds', function (): void {
+        $breakdown = $this->calculator->calculate(purchase());
+
+        // 51.20 a dollar paid, 51.48 a dollar worth: 0.28 on each of 50,000.
+        expect($breakdown->customerRate)->toBe('51.200000000000')
+            ->and($breakdown->costRate)->toBe('51.48')
+            ->and($breakdown->grossProfit->toDisplayString())->toBe('14000.00')
+            ->and($breakdown->grossProfit->currency->code)->toBe('EGP');
+    });
+
+    /*
+     * The same money, described from either side, has to come to the same thing.
+     *
+     * Give 2,574,000 EGP for 50,000 USD when a dollar cost 51.20. On the delivered leg
+     * that is a 14,000 EGP loss. On the received leg it is the identical loss expressed
+     * in dollars — 14,000 / 51.20 — and the two must agree, or the basis is not a way
+     * of stating the deal but a way of changing it.
+     */
+    it('gives the same answer from either side, in that side is currency', function (): void {
+        $onDelivered = $this->calculator->calculate(purchase([
+            'deliveredAmount' => $this->egp->money('2574000'),
+            'costRate' => '51.20',
+        ]));
+
+        $onReceived = $this->calculator->calculate(new ExchangeInput(
+            receivedCurrency: $this->usd,
+            receivedAmount: $this->usd->money('50000'),
+            receivedInto: $this->into,
+            deliveredCurrency: $this->egp,
+            deliveredAmount: $this->egp->money('2574000'),
+            deliveredFrom: $this->from,
+            occurredAt: now(),
+            marginBasis: MarginBasis::Received,
+            // The same cost, turned over by hand: 1 / 51.20.
+            costRate: '0.01953125',
+        ));
+
+        expect($onDelivered->grossProfit->toDisplayString())->toBe('-14000.00')
+            ->and($onDelivered->grossProfit->currency->code)->toBe('EGP')
+            ->and($onReceived->grossProfit->toDisplayString())->toBe('-273.4375')
+            ->and($onReceived->grossProfit->currency->code)->toBe('USD');
+
+        // -14,000 EGP at 51.20 to the dollar is -273.4375 USD. The same loss.
+        expect(bcdiv('-14000', '51.20', 4))->toBe('-273.4375');
+    });
+
+    it('takes a per-unit margin against the leg the rate is quoted per', function (): void {
+        $breakdown = $this->calculator->calculate(purchase([
+            'profitMethod' => ProfitMethod::PerUnit,
+            'costRate' => null,
+            'profitValue' => '0.28',
+        ]));
+
+        // 0.28 EGP on each of 50,000 dollars, and the cost rate works out above the
+        // customer rate rather than below it — the currency was bought, not sold.
+        expect($breakdown->costRate)->toBe('51.480000000000')
+            ->and($breakdown->grossProfit->toDisplayString())->toBe('14000.00');
+    });
+
+    it('takes a stated amount in the currency the margin is measured in', function (): void {
+        $breakdown = $this->calculator->calculate(purchase([
+            'profitMethod' => ProfitMethod::FixedAmount,
+            'costRate' => null,
+            'profitValue' => '9000',
+        ]));
+
+        expect($breakdown->grossProfit->toDisplayString())->toBe('9000.00')
+            ->and($breakdown->grossProfit->currency->code)->toBe('EGP')
+            ->and($breakdown->costValue->toDisplayString())->toBe('2569000.00');
+    });
+
+    it('takes a percentage of what was paid out', function (): void {
+        $breakdown = $this->calculator->calculate(purchase([
+            'profitMethod' => ProfitMethod::Percentage,
+            'costRate' => null,
+            'profitValue' => '1',
+        ]));
+
+        // 1% of 2,560,000.
+        expect($breakdown->grossProfit->toDisplayString())->toBe('25600.00');
+    });
+
+    it('nets fees and costs in the margin currency', function (): void {
+        $breakdown = $this->calculator->calculate(purchase([
+            'feesCharged' => $this->egp->money('500'),
+            'expenses' => $this->egp->money('200'),
+            'commissions' => $this->egp->money('300'),
+        ]));
+
+        expect($breakdown->netProfit->toDisplayString())->toBe('14000.00')
+            ->and($breakdown->netProfit->currency->code)->toBe('EGP');
     });
 });

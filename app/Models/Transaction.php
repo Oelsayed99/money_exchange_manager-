@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Domain\Audit\Auditable;
+use App\Enums\MarginBasis;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
 use App\Enums\ProfitStatus;
@@ -30,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $counterparty_id
  * @property MovementMethod|null $method
  * @property ProfitMethod|null $profit_method
+ * @property MarginBasis|null $margin_basis
  * @property ProfitStatus|null $profit_status
  * @property int|null $profit_currency_id
  * @property string|null $customer_rate
@@ -63,6 +65,7 @@ final class Transaction extends Model
         'profit_currency_id',
         'customer_rate',
         'cost_rate',
+        'margin_basis',
         'profit_value',
         'customer_value',
         'cost_value',
@@ -86,6 +89,7 @@ final class Transaction extends Model
             'status' => TransactionStatus::class,
             'method' => MovementMethod::class,
             'profit_method' => ProfitMethod::class,
+            'margin_basis' => MarginBasis::class,
             'profit_status' => ProfitStatus::class,
             'draft_payload' => 'array',
             'occurred_at' => 'datetime',

@@ -275,22 +275,24 @@ describe('which way round the rate is', () => {
 });
 
 /**
- * The cost rate is per unit *delivered*, always.
+ * The cost rate is quoted exactly the way the deal rate is.
  *
- * The deal rate above it can be quoted either way round at the operator's choice. The
- * cost rate cannot follow it: the ledger holds cost per unit delivered, and inverting
- * it would mean dividing. So it states its own orientation on screen, and keeps
- * stating the same one after the deal rate has been turned over.
+ * It used to be fixed to "per unit delivered" whichever way the rate above was
+ * pointing, which is right for a sale and asks for 0.019531 on a purchase. It now
+ * follows the deal rate, and the margin moves to whichever leg that makes it — see
+ * MarginBasis. Nothing is inverted anywhere: the rate is applied by multiplication to
+ * whichever leg is the base.
  */
 describe('the cost rate', () => {
-    it('says which way round it is', () => {
+    it('is quoted the same way round as the deal rate', () => {
         render(<ExchangeCreate {...props} />);
 
-        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('1 EGP =');
-        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('USD');
+        expect(rowAround('transactions.exchange.rate')).toHaveTextContent('1 USD =');
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('1 USD =');
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('EGP');
     });
 
-    it('does not turn over when the deal rate does', async () => {
+    it('turns over with the deal rate', async () => {
         render(<ExchangeCreate {...props} />);
 
         await act(async () => {

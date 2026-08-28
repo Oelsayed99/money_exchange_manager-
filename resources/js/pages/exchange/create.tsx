@@ -60,6 +60,7 @@ type ExchangeForm = {
     delivered_from_id: string;
     profit_method: string;
     cost_rate: string;
+    margin_basis: string;
     profit_value: string;
     fees_charged: string;
     expenses: string;
@@ -112,6 +113,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
         delivered_from_id: String(accounts[0]?.id ?? ''),
         profit_method: 'rate_difference',
         cost_rate: '',
+        margin_basis: 'received',
         profit_value: '',
         fees_charged: '',
         expenses: '',
@@ -336,10 +338,23 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
     const inexact = solved !== null && !solved.exact && solved.field === 'amount';
 
-    // The deal rate can be quoted either way round; the cost rate is always per unit
-    // delivered. Whether they currently agree decides whether the operator is being
-    // asked for 51.20 or for 0.019531.
-    const costRateFlipped = baseCode !== '' && deliveredCode !== '' && baseCode !== deliveredCode;
+    /*
+        Which leg carries the margin, taken from the way the deal rate is being quoted.
+
+        The rate reads "1 base = X quote", so the quote currency is the one a margin is
+        naturally counted in — and the cost rate can then be typed in exactly the same
+        terms and applied by multiplication. Selling dollars for pounds that is the
+        received leg; buying dollars with pounds it is the delivered leg, which is why
+        this is derived rather than fixed. See MarginBasis.
+    */
+    const marginBasis = quoteCurrencyId === data.received_currency_id ? 'received' : 'delivered';
+    const marginCode = marginBasis === 'received' ? receivedCode : deliveredCode;
+
+    useEffect(() => {
+        if (data.margin_basis !== marginBasis) {
+            setData('margin_basis', marginBasis);
+        }
+    }, [marginBasis, data.margin_basis, setData]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -542,7 +557,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                            1 {deliveredCode} =
+                                            1 {baseCode} =
                                         </span>
                                         <MoneyInput
                                             id="cost_rate"
@@ -551,7 +566,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                             className="w-40"
                                         />
                                         <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                            {receivedCode}
+                                            {quoteCode}
                                         </span>
                                     </div>
 
@@ -563,25 +578,14 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                         <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
                                             <span>{t('transactions.exchange.customer_rate_inline')}</span>
                                             <span className="font-mono tabular-nums" dir="ltr">
-                                                1 {deliveredCode} = {breakdown.customer_rate} {receivedCode}
+                                                1 {baseCode} = {breakdown.customer_rate} {quoteCode}
                                             </span>
                                         </div>
                                     )}
 
-                                    {/* The cost rate is per unit delivered and cannot
-                                        follow the swap above: turning it over would mean
-                                        dividing, and this application does not divide
-                                        into a figure the margin is derived from. When the
-                                        two end up pointing opposite ways — which is what
-                                        buying does — the mismatch is said out loud rather
-                                        than left to be noticed. */}
-                                    {costRateFlipped && (
-                                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                                            {t('transactions.exchange.cost_rate_flipped', { dealBase: baseCode, dealQuote: quoteCode })}
-                                        </p>
-                                    )}
-
-                                    <p className="text-muted-foreground text-xs">{t('transactions.exchange.cost_rate_hint')}</p>
+                                    <p className="text-muted-foreground text-xs">
+                                        {t('transactions.exchange.cost_rate_hint', { currency: marginCode })}
+                                    </p>
                                     <InputError message={errors.cost_rate} />
                                 </div>
                             )}
@@ -612,7 +616,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                         <Label htmlFor={field} className="text-xs">
                                             {label}
                                         </Label>
-                                        <MoneyInput id={field} value={data[field]} onChange={(v) => setData(field, v)} currency={receivedCode} />
+                                        <MoneyInput id={field} value={data[field]} onChange={(v) => setData(field, v)} currency={marginCode} />
                                         <InputError message={errors[field]} />
                                     </div>
                                 ))}

@@ -10,6 +10,7 @@ use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Money;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\LegRole;
+use App\Enums\MarginBasis;
 use App\Enums\ProfitMethod;
 use App\Enums\ProfitStatus;
 use App\Enums\TransactionStatus;
@@ -289,5 +290,84 @@ describe('preview', function (): void {
 
         expect(Transaction::query()->count())->toBe(0)
             ->and(LedgerEntry::query()->count())->toBe(0);
+    });
+});
+
+/**
+ * Recording a purchase, with the margin on the leg that went out.
+ *
+ * The same 50,000 dollars and the same pounds, entered the way a buyer states it: 51.20
+ * a dollar paid, 51.48 a dollar worth. Everything the received-basis deals assert has to
+ * hold here too — the currencies balance, the clearing pair nets, the ledger verifies —
+ * only mirrored. ADR 0027.
+ */
+describe('the margin on the delivered leg', function (): void {
+    function purchaseDeal(array $overrides = []): ExchangeInput
+    {
+        $test = test();
+
+        return new ExchangeInput(
+            receivedCurrency: $test->usd,
+            receivedAmount: $test->usd->money('50000'),
+            receivedInto: $test->usdSafe,
+            deliveredCurrency: $test->egp,
+            deliveredAmount: $test->egp->money('2560000'),
+            deliveredFrom: $test->egpSafe,
+            occurredAt: now(),
+            profitMethod: ProfitMethod::RateDifference,
+            marginBasis: MarginBasis::Delivered,
+            costRate: '51.48',
+            feesCharged: $overrides['fees'] ?? null,
+            expenses: $overrides['expenses'] ?? null,
+            commissions: $overrides['commissions'] ?? null,
+        );
+    }
+
+    it('recognises the margin in the currency that went out', function (): void {
+        $transaction = $this->exchange->record(purchaseDeal());
+
+        expect($transaction->net_profit)->toBe('14000.0000000000')
+            ->and($transaction->customer_rate)->toBe('51.200000000000')
+            ->and($transaction->cost_rate)->toBe('51.480000000000')
+            ->and($transaction->profit_currency_id)->toBe($this->egp->id)
+            ->and($transaction->margin_basis)->toBe(MarginBasis::Delivered);
+    });
+
+    it('posts the profit to the delivered currency, not the received one', function (): void {
+        $this->exchange->record(purchaseDeal());
+
+        expect(balance($this->resolver->system(LedgerAccountSubkind::TradingProfit, $this->egp)))->toBe('14000.00')
+            ->and(LedgerBalance::query()
+                ->where('ledger_account_id', $this->resolver->system(LedgerAccountSubkind::TradingProfit, $this->usd)->id)
+                ->exists())->toBeFalse();
+    });
+
+    // The mirror of the received-basis check: the margin side ends up holding the other
+    // leg valued at cost, and the other side holds itself.
+    it('leaves the clearing pair flat at the cost rate', function (): void {
+        $this->exchange->record(purchaseDeal());
+
+        // 2,560,000 debited out, 14,000 debited again = 2,574,000 = 50,000 × 51.48.
+        expect(balance($this->resolver->system(LedgerAccountSubkind::FxPosition, $this->egp)))->toBe('2574000.00')
+            ->and(balance($this->resolver->system(LedgerAccountSubkind::FxPosition, $this->usd)))->toBe('-50000.00');
+    });
+
+    it('charges fees and costs to the delivered side', function (): void {
+        $this->exchange->record(purchaseDeal([
+            'fees' => $this->egp->money('500'),
+            'expenses' => $this->egp->money('200'),
+        ]));
+
+        expect(balance($this->resolver->system(LedgerAccountSubkind::FeesIncome, $this->egp)))->toBe('500.00')
+            ->and(balance($this->resolver->system(LedgerAccountSubkind::Expense, $this->egp)))->toBe('200.00');
+    });
+
+    it('leaves a ledger that verifies', function (): void {
+        $this->exchange->record(purchaseDeal([
+            'fees' => $this->egp->money('500'),
+            'commissions' => $this->egp->money('300'),
+        ]));
+
+        $this->artisan('ledger:verify --transactions')->assertExitCode(0);
     });
 });

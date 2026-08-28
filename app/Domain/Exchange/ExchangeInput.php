@@ -6,6 +6,7 @@ namespace App\Domain\Exchange;
 
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
+use App\Enums\MarginBasis;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
 use App\Models\Account;
@@ -33,7 +34,9 @@ final readonly class ExchangeInput
         public Account $deliveredFrom,
         public DateTimeInterface $occurredAt,
         public ProfitMethod $profitMethod = ProfitMethod::RateDifference,
-        /** Received per unit delivered, at what the delivered currency cost us. */
+        /** Which leg the margin is measured on. Received is the historical default. */
+        public MarginBasis $marginBasis = MarginBasis::Received,
+        /** Margin currency per unit of the other leg, at what that leg cost us. */
         public ?string $costRate = null,
         /** The figure typed beside the method: a margin, a percentage or an amount. */
         public ?string $profitValue = null,
@@ -62,13 +65,16 @@ final readonly class ExchangeInput
             }
         }
 
-        // Profit is measured in the received currency (Section 3 requires the currency
-        // to be explicit), so anything added to or taken off it must be in that currency.
+        // Profit is measured on one leg (Section 3 requires the currency to be
+        // explicit), so anything added to or taken off it must be in that currency —
+        // whichever leg this deal put the margin on.
+        $profitCurrency = $marginBasis === MarginBasis::Received ? $receivedCurrency : $deliveredCurrency;
+
         foreach (['fees' => $feesCharged, 'expenses' => $expenses, 'commissions' => $commissions] as $name => $amount) {
-            if ($amount !== null && ! $amount->currency->is($receivedCurrency->spec())) {
+            if ($amount !== null && ! $amount->currency->is($profitCurrency->spec())) {
                 throw new CurrencyMismatch(
                     "The {$name} on an exchange are measured in the profit currency "
-                    ."({$receivedCurrency->code}), but {$amount->currency->code} was given."
+                    ."({$profitCurrency->code}), but {$amount->currency->code} was given."
                 );
             }
         }
@@ -77,7 +83,49 @@ final readonly class ExchangeInput
     /** The currency profit is measured in. */
     public function profitCurrency(): Currency
     {
-        return $this->receivedCurrency;
+        return $this->marginBasis === MarginBasis::Received
+            ? $this->receivedCurrency
+            : $this->deliveredCurrency;
+    }
+
+    /**
+     * The leg the margin is measured in — the one already denominated in that currency.
+     *
+     * It is the deal's own figure, not a conversion: what the customer actually paid, or
+     * what we actually paid them.
+     */
+    public function marginLeg(): Money
+    {
+        return $this->marginBasis === MarginBasis::Received
+            ? $this->receivedAmount
+            : $this->deliveredAmount;
+    }
+
+    /** The other leg — the one the cost rate is quoted per unit of. */
+    public function otherLeg(): Money
+    {
+        return $this->marginBasis === MarginBasis::Received
+            ? $this->deliveredAmount
+            : $this->receivedAmount;
+    }
+
+    /**
+     * Whether the margin leg came in.
+     *
+     * Decides the sign of everything: money arriving in the margin currency means a
+     * higher figure is better, money leaving it means a lower one is.
+     */
+    public function marginCameIn(): bool
+    {
+        return $this->marginBasis === MarginBasis::Received;
+    }
+
+    /** The account the margin currency moves through. */
+    public function marginAccount(): Account
+    {
+        return $this->marginBasis === MarginBasis::Received
+            ? $this->receivedInto
+            : $this->deliveredFrom;
     }
 
     private function assertCurrency(Money $amount, Currency $currency, string $side): void

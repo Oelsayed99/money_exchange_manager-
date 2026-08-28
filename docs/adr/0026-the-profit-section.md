@@ -65,7 +65,10 @@ So the orientation is fixed and written on screen. When the deal rate is current
 quoted the other way — which is what **buying** does — the screen says so, in amber,
 next to the box.
 
-### What this does not fix
+### What this does not fix — **closed by [0027](0027-which-leg-carries-the-margin.md)**
+
+> The section below describes the state after this ADR and before 0027, which fixed it.
+> Kept because the reasoning that ruled out inverting the rate still applies.
 
 Selling is now natural: the rate reads `1 USD = 51.48 EGP` and the cost `1 USD = 51.20
 EGP`, one under the other.

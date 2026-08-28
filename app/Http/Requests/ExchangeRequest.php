@@ -7,6 +7,7 @@ namespace App\Http\Requests;
 use App\Domain\Exchange\ExchangeInput;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Enums\MarginBasis;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
 use App\Models\Account;
@@ -47,6 +48,7 @@ final class ExchangeRequest extends FormRequest
             'delivered_from_id' => ['required', 'integer', Rule::exists('accounts', 'id')->whereNull('deleted_at')],
 
             'profit_method' => ['required', Rule::enum(ProfitMethod::class)],
+            'margin_basis' => ['nullable', Rule::enum(MarginBasis::class)],
             'cost_rate' => ['nullable', 'string'],
             'profit_value' => ['nullable', 'string'],
 
@@ -122,6 +124,16 @@ final class ExchangeRequest extends FormRequest
             return is_string($value) && $value !== '' ? $currency->money($value) : null;
         };
 
+        // Fees, expenses and commissions are denominated in whichever currency the
+        // margin is, because they are added to and taken off it. Building them against
+        // the received leg regardless would hand the calculator a fee in the wrong
+        // currency the moment the margin sat on the other side.
+        $basis = $this->validated('margin_basis') !== null
+            ? MarginBasis::from((string) $this->validated('margin_basis'))
+            : MarginBasis::Received;
+
+        $marginCurrency = $basis === MarginBasis::Received ? $received : $delivered;
+
         return new ExchangeInput(
             receivedCurrency: $received,
             receivedAmount: $received->money((string) $this->validated('received_amount')),
@@ -131,11 +143,14 @@ final class ExchangeRequest extends FormRequest
             deliveredFrom: Account::query()->findOrFail((int) $this->validated('delivered_from_id')),
             occurredAt: new \DateTimeImmutable((string) $this->validated('occurred_at')),
             profitMethod: ProfitMethod::from((string) $this->validated('profit_method')),
+            // Absent means the received leg, which is what every deal recorded before
+            // the basis existed meant. See MarginBasis.
+            marginBasis: $basis,
             costRate: $this->validated('cost_rate'),
             profitValue: $this->validated('profit_value'),
-            feesCharged: $money('fees_charged', $received),
-            expenses: $money('expenses', $received),
-            commissions: $money('commissions', $received),
+            feesCharged: $money('fees_charged', $marginCurrency),
+            expenses: $money('expenses', $marginCurrency),
+            commissions: $money('commissions', $marginCurrency),
             counterparty: $this->validated('counterparty_id') !== null
                 ? Counterparty::query()->find((int) $this->validated('counterparty_id'))
                 : null,

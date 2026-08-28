@@ -170,3 +170,35 @@ test('records the deal and shows it on the client statement', async ({ page }) =
     await expect(row).toContainText(grouped('2574000.00'));
     await expect(row).toContainText(grouped('50000.00'));
 });
+
+/**
+ * A purchase, stated the way a buyer states it.
+ *
+ * Buying 50,000 USD and paying pounds used to ask for a cost rate of 0.019531 — the
+ * reciprocal of the 51.20 the operator was thinking — and report the margin in dollars.
+ * The margin now sits on the leg the rate is quoted against, so the same 51.48 goes in
+ * both boxes' worth of grammar and the answer comes out in pounds. ADR 0027.
+ */
+test('works a purchase out in the currency it was paid in', async ({ page }) => {
+    await page.getByLabel('I am buying', { exact: true }).fill('50000');
+    await page.getByRole('combobox', { name: 'Currency' }).first().selectOption({ label: 'USD' });
+    await page.getByRole('combobox', { name: 'Currency' }).nth(1).selectOption({ label: 'EGP' });
+    await page.getByLabel('Rate', { exact: true }).fill('51.20');
+    await expect(page.getByLabel('Paying in')).toHaveValue('2560000.00', { timeout: 10_000 });
+
+    // The cost box reads the same way round as the rate above it — no reciprocal.
+    const costRate = page.getByLabel('Cost rate');
+    await expect(costRate.locator('xpath=../..')).toContainText('1 USD =');
+    await costRate.fill('51.48');
+
+    // 0.28 a dollar on 50,000 dollars, in pounds.
+    const profit = page.getByRole('region', { name: 'Profit', exact: true });
+
+    await expect(profit).toContainText(grouped('14000.00'), { timeout: 10_000 });
+    await expect(profit).toContainText('EGP');
+
+    // And it records, with the margin against the leg that was paid out.
+    await page.getByRole('button', { name: 'Record exchange' }).click();
+
+    await expect(page.getByText('Exchange recorded.')).toBeVisible();
+});

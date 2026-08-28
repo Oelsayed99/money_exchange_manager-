@@ -25,6 +25,7 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0024](docs/adr/0024-brand-assets.md) | Brand assets, the theme-aware wordmark, and what checks them |
 | [0025](docs/adr/0025-one-recording-screen.md) | One recording screen, switched from its heading |
 | [0026](docs/adr/0026-the-profit-section.md) | The profit section: one flat-margin route, a stated cost rate, two halves |
+| [0027](docs/adr/0027-which-leg-carries-the-margin.md) | Which leg carries the margin — buying, without a reciprocal |
 
 ### Money is a decimal string, not integer minor units
 
