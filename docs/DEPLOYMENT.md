@@ -256,6 +256,28 @@ curl -s https://finance.example.com/.env | head -1   # must NOT be your config
 
 The last one is the check people forget, and the one that matters most.
 
+### Clearing the trial entries
+
+Anything typed while learning the application is still in the ledger, and once real
+deals start going in beside it there is no clean line between the two.
+
+```bash
+php artisan ledger:purge
+```
+
+It lists what it is about to delete, waits to be told to go on, and takes a backup
+first. Currencies, accounts, counterparties, users and roles are kept — everything that
+describes the business rather than what it did.
+
+**Declared opening balances are kept too**, because they are figures somebody typed
+about a client and may be as real as anything in the ledger. Add `--openings` to clear
+those as well.
+
+This is the only command that deletes recorded history. It exists for this one moment.
+Afterwards a mistake is corrected with a reversal, which is what the append-only
+triggers are there to insist on — and `ledger:purge` puts those triggers back exactly as
+it found them, asserted by its own tests.
+
 ## Deploying a change
 
 ```bash

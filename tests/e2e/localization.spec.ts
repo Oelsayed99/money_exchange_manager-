@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { signIn, switchTo } from './support';
 
 /**
@@ -15,11 +15,22 @@ test.beforeEach(async ({ page }) => {
     await switchTo(page, 'en');
 });
 
+/**
+ * The sidebar itself, not merely something carrying data-side.
+ *
+ * Radix puts data-side on its own popover content, and since the language menu now
+ * survives the switch a bare [data-side] matches two elements. data-variant is the
+ * sidebar primitive's, and nothing else on the page has one.
+ */
+function sidebar(page: Page) {
+    return page.locator('[data-variant][data-side]');
+}
+
 test('turns the whole interface over, sidebar included', async ({ page }) => {
     await page.goto('/dashboard');
 
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
-    await expect(page.locator('[data-side]')).toHaveAttribute('data-side', 'left');
+    await expect(sidebar(page)).toHaveAttribute('data-side', 'left');
 
     await switchTo(page, 'ar');
 
@@ -27,7 +38,7 @@ test('turns the whole interface over, sidebar included', async ({ page }) => {
 
     // The sidebar itself moves. Mirroring the text and leaving the furniture where it
     // was is the bug this asserts against — it was a real one, reported by the owner.
-    await expect(page.locator('[data-side]')).toHaveAttribute('data-side', 'right');
+    await expect(sidebar(page)).toHaveAttribute('data-side', 'right');
 
     await expect(page.getByRole('heading', { name: 'لوحة المتابعة' })).toBeVisible();
 });
@@ -43,7 +54,11 @@ test('keeps the filters you had applied', async ({ page }) => {
     // Same page, same query string, same rows — in Arabic.
     await expect(page).toHaveURL(/type=credit_deposit/);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    expect(await page.getByRole('row').count()).toBe(before);
+    // A retrying assertion, not a bare count(). The page component now survives the
+    // switch instead of being rebuilt, so the rows are re-rendered rather than
+    // remounted — and sampling the DOM the instant `lang` changes can catch it
+    // mid-update. What is being asserted is unchanged.
+    await expect(page.getByRole('row')).toHaveCount(before);
 
     await expect(page.getByRole('combobox').first()).toHaveValue('credit_deposit');
 });
@@ -65,4 +80,39 @@ test('answers an Arabic operator in Arabic when they get something wrong', async
 
     // Arabic, not "The as of field must be a date before or equal to today."
     await expect(page.getByRole('alert').first()).toContainText(/[؀-ۿ]/);
+});
+
+/**
+ * A half-entered deal survives the switch.
+ *
+ * The reason an operator reaches for the language menu mid-deal is to read a label they
+ * are unsure of. Losing the amounts they had already typed is the worst possible answer
+ * to that: it punishes exactly the person the second language is there for.
+ *
+ * The filters test above passes either way — filters live in the query string, and the
+ * server redirects back to it. This is about the form state that only exists in the
+ * browser.
+ */
+test('keeps what you had typed into a form', async ({ page }) => {
+    await page.goto('/exchange');
+
+    await page.getByLabel('This deal').selectOption({ label: 'I am selling' });
+    await page.getByLabel('I am selling', { exact: true }).fill('50000');
+    await page.getByRole('combobox', { name: 'Currency' }).first().selectOption({ label: 'USD' });
+    await page.getByRole('combobox', { name: 'Currency' }).last().selectOption({ label: 'EGP' });
+    await page.getByLabel('Rate', { exact: true }).fill('51.48');
+    await page.getByLabel('Reference').fill('KEEP-ME');
+
+    // The computed leg, which only exists because the two above were typed.
+    await expect(page.getByLabel('Paid in')).toHaveValue('2574000.00', { timeout: 10_000 });
+
+    await switchTo(page, 'ar');
+
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+
+    // Same figures, Arabic labels. Nothing was retyped.
+    await expect(page.getByLabel('أنا أبيع', { exact: true })).toHaveValue('50000');
+    await expect(page.getByLabel('القبض بـ')).toHaveValue('2574000.00');
+    await expect(page.getByLabel('السعر', { exact: true })).toHaveValue('51.48');
+    await expect(page.getByLabel('المرجع')).toHaveValue('KEEP-ME');
 });

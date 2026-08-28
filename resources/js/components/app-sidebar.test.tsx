@@ -40,10 +40,12 @@ function renderSidebar() {
 }
 
 function sidebarElement(): HTMLElement {
-    const element = document.querySelector('[data-side]');
+    // data-variant as well as data-side: Radix popovers carry a data-side of their own,
+    // and only the sidebar primitive sets a variant.
+    const element = document.querySelector('[data-variant][data-side]');
 
     if (!(element instanceof HTMLElement)) {
-        throw new Error('No element carrying data-side was rendered.');
+        throw new Error('No sidebar carrying data-side was rendered.');
     }
 
     return element;

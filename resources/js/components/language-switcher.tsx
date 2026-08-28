@@ -6,9 +6,14 @@ import { Check, Languages } from 'lucide-react';
 /**
  * Language switcher.
  *
- * Uses a partial visit that preserves scroll and state, so switching language does not
- * discard active filters or reset pagination — a requirement of Section 12 rather than
- * a nicety. The server redirects back to the same URL.
+ * The server redirects back to the same URL, so the page, its filters and its
+ * pagination survive the switch — a requirement of Section 12 rather than a nicety.
+ *
+ * `preserveState` is what keeps a half-typed form. Without it Inertia tears the page
+ * component down and builds a new one, so every useState goes back to its initial
+ * value: an operator mid-deal who switches to Arabic to read a label loses the amounts
+ * they had entered. The translations still change, because they arrive as props rather
+ * than as state.
  */
 export function LanguageSwitcher({ className }: { className?: string }) {
     const { t, locale, locales } = useTranslations();
@@ -18,7 +23,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
             return;
         }
 
-        router.put('/locale', { locale: code }, { preserveScroll: true, preserveState: false });
+        router.put('/locale', { locale: code }, { preserveScroll: true, preserveState: true });
     };
 
     return (
