@@ -11,8 +11,8 @@ import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
 import type { BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeftRight, LoaderCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowDownRight, ArrowLeftRight, LoaderCircle, TrendingDown, TrendingUp } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
 
 interface Option {
     value: string;
@@ -339,6 +339,11 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
     const inexact = solved !== null && !solved.exact && solved.field === 'amount';
 
+    // The deal rate can be quoted either way round; the cost rate is always per unit
+    // delivered. Whether they currently agree decides whether the operator is being
+    // asked for 51.20 or for 0.019531.
+    const costRateFlipped = baseCode !== '' && deliveredCode !== '' && baseCode !== deliveredCode;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={t('transactions.exchange.title')} />
@@ -519,10 +524,66 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                 </select>
                             </div>
 
+                            {/*
+                                The cost rate, stated the way the rate above is stated.
+                                It used to be a bare number box, and "per unit" was left
+                                to a line of hint text — which is how a test written with
+                                the spec open still set a deal up backwards and valued it
+                                at a hundred and thirty million.
+
+                                Always this way round, whichever way the rate above is
+                                currently quoted: the ledger holds cost per unit
+                                delivered, and turning it over would mean dividing, which
+                                is where precision goes. What the customer was charged is
+                                printed underneath in the same terms, so the difference —
+                                which is the whole method — can be read rather than
+                                worked out.
+                            */}
                             {selectedMethod?.needsCostRate && (
                                 <div className="grid gap-2">
                                     <Label htmlFor="cost_rate">{t('transactions.exchange.cost_rate')}</Label>
-                                    <MoneyInput id="cost_rate" value={data.cost_rate} onChange={(v) => setData('cost_rate', v)} />
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-muted-foreground font-mono text-sm" dir="ltr">
+                                            1 {deliveredCode} =
+                                        </span>
+                                        <MoneyInput
+                                            id="cost_rate"
+                                            value={data.cost_rate}
+                                            onChange={(v) => setData('cost_rate', v)}
+                                            className="w-40"
+                                        />
+                                        <span className="text-muted-foreground font-mono text-sm" dir="ltr">
+                                            {receivedCode}
+                                        </span>
+                                    </div>
+
+                                    {/* What was charged, in the box's own units. The
+                                        figure to beat, at the scale it should be typed
+                                        at — which is the whole of the method and was
+                                        previously left to be worked out. */}
+                                    {breakdown !== null && (
+                                        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+                                            <span>{t('transactions.exchange.customer_rate_inline')}</span>
+                                            <span className="font-mono tabular-nums" dir="ltr">
+                                                1 {deliveredCode} = {breakdown.customer_rate} {receivedCode}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* The cost rate is per unit delivered and cannot
+                                        follow the swap above: turning it over would mean
+                                        dividing, and this application does not divide
+                                        into a figure the margin is derived from. When the
+                                        two end up pointing opposite ways — which is what
+                                        buying does — the mismatch is said out loud rather
+                                        than left to be noticed. */}
+                                    {costRateFlipped && (
+                                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                                            {t('transactions.exchange.cost_rate_flipped', { dealBase: baseCode, dealQuote: quoteCode })}
+                                        </p>
+                                    )}
+
                                     <p className="text-muted-foreground text-xs">{t('transactions.exchange.cost_rate_hint')}</p>
                                     <InputError message={errors.cost_rate} />
                                 </div>
@@ -632,59 +693,93 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
                     {/* The calculation, alongside the form rather than below it, so the
                         margin is visible while the amounts are being typed. */}
-                    <aside className="border-sidebar-border/70 dark:border-sidebar-border h-fit rounded-xl border p-4 lg:sticky lg:top-4">
-                        <h2 className="mb-3 text-sm font-medium">{t('transactions.preview.title')}</h2>
+                    <aside className="h-fit space-y-3 lg:sticky lg:top-4">
+                        <h2 className="text-sm font-medium">{t('transactions.preview.title')}</h2>
 
                         {breakdown === null ? (
-                            <p className="text-muted-foreground text-sm">{t('transactions.preview.awaiting')}</p>
+                            <p className="border-sidebar-border/70 dark:border-sidebar-border text-muted-foreground rounded-xl border p-4 text-sm">
+                                {t('transactions.preview.awaiting')}
+                            </p>
                         ) : (
-                            <dl className={'space-y-2 text-sm ' + (previewing ? 'opacity-60' : '')}>
-                                <Row label={t('transactions.preview.customer_rate')}>
-                                    <span className="font-mono tabular-nums" dir="ltr">
-                                        {breakdown.customer_rate}
-                                    </span>
-                                </Row>
-                                {breakdown.cost_rate && (
-                                    <Row label={t('transactions.preview.cost_rate')}>
+                            /*
+                                Two halves rather than one column of eleven rows. What
+                                the deal cost and what it made are different questions,
+                                and the figure the operator is actually looking for —
+                                the margin — was the ninth line of a list.
+
+                                Side by side while the aside is full width; stacked once
+                                it becomes the narrow rail, where two columns would put
+                                three digits on a line.
+                            */
+                            <div className={'grid gap-3 sm:grid-cols-2 lg:grid-cols-1 ' + (previewing ? 'opacity-60' : '')}>
+                                <Panel
+                                    tone="cost"
+                                    icon={<ArrowDownRight className="size-4 shrink-0" aria-hidden="true" />}
+                                    title={t('transactions.preview.cost_side')}
+                                >
+                                    {breakdown.cost_rate && (
+                                        <Row label={t('transactions.preview.cost_rate')}>
+                                            <span className="font-mono tabular-nums" dir="ltr">
+                                                {breakdown.cost_rate}
+                                            </span>
+                                        </Row>
+                                    )}
+                                    <Row label={t('transactions.preview.cost_value')}>
+                                        <MoneyDisplay {...toMoney(breakdown.cost_value)} />
+                                    </Row>
+                                    <Row label={t('transactions.preview.expenses')}>
+                                        <MoneyDisplay {...toMoney(breakdown.expenses)} />
+                                    </Row>
+                                    <Row label={t('transactions.preview.commissions')}>
+                                        <MoneyDisplay {...toMoney(breakdown.commissions)} />
+                                    </Row>
+                                </Panel>
+
+                                {/*
+                                    Green until the deal loses money, then red. The
+                                    heading changes with it — Section 13 forbids saying
+                                    anything with colour alone, and a red border is not
+                                    something a screen reader can read out.
+                                */}
+                                <Panel
+                                    tone={breakdown.is_loss ? 'cost' : 'profit'}
+                                    icon={
+                                        breakdown.is_loss ? (
+                                            <TrendingDown className="size-4 shrink-0" aria-hidden="true" />
+                                        ) : (
+                                            <TrendingUp className="size-4 shrink-0" aria-hidden="true" />
+                                        )
+                                    }
+                                    title={breakdown.is_loss ? t('transactions.preview.loss_side') : t('transactions.preview.profit_side')}
+                                >
+                                    <Row label={t('transactions.preview.customer_rate')}>
                                         <span className="font-mono tabular-nums" dir="ltr">
-                                            {breakdown.cost_rate}
+                                            {breakdown.customer_rate}
                                         </span>
                                     </Row>
-                                )}
-                                <Row label={t('transactions.preview.customer_value')}>
-                                    <MoneyDisplay {...toMoney(breakdown.customer_value)} />
-                                </Row>
-                                <Row label={t('transactions.preview.cost_value')}>
-                                    <MoneyDisplay {...toMoney(breakdown.cost_value)} />
-                                </Row>
+                                    <Row label={t('transactions.preview.customer_value')}>
+                                        <MoneyDisplay {...toMoney(breakdown.customer_value)} />
+                                    </Row>
+                                    <Row label={t('transactions.preview.gross_profit')}>
+                                        <MoneyDisplay {...toMoney(breakdown.gross_profit)} signed />
+                                    </Row>
+                                    <Row label={t('transactions.preview.fees')}>
+                                        <MoneyDisplay {...toMoney(breakdown.fees_charged)} />
+                                    </Row>
 
-                                <div className="border-sidebar-border/70 dark:border-sidebar-border my-2 border-t" />
+                                    <div className="my-2 border-t border-current/20" />
 
-                                <Row label={t('transactions.preview.gross_profit')}>
-                                    <MoneyDisplay {...toMoney(breakdown.gross_profit)} signed />
-                                </Row>
-                                <Row label={t('transactions.preview.fees')}>
-                                    <MoneyDisplay {...toMoney(breakdown.fees_charged)} />
-                                </Row>
-                                <Row label={t('transactions.preview.expenses')}>
-                                    <MoneyDisplay {...toMoney(breakdown.expenses)} />
-                                </Row>
-                                <Row label={t('transactions.preview.commissions')}>
-                                    <MoneyDisplay {...toMoney(breakdown.commissions)} />
-                                </Row>
-
-                                <div className="border-sidebar-border/70 dark:border-sidebar-border my-2 border-t" />
-
-                                <Row label={<span className="font-medium">{t('transactions.preview.net_profit')}</span>}>
-                                    <MoneyDisplay {...toMoney(breakdown.net_profit)} signed className="font-medium" />
-                                </Row>
-                            </dl>
+                                    <Row label={<span className="font-medium">{t('transactions.preview.net_profit')}</span>}>
+                                        <MoneyDisplay {...toMoney(breakdown.net_profit)} signed className="font-medium" />
+                                    </Row>
+                                </Panel>
+                            </div>
                         )}
 
                         {/* Section 3: warn before saving an unexpected loss. The server
                             enforces this too — a warning that can be skipped is not one. */}
                         {breakdown?.is_loss && (
-                            <div className="mt-4 space-y-2 rounded-lg border border-amber-600/40 bg-amber-600/10 p-3">
+                            <div className="space-y-2 rounded-lg border border-amber-600/40 bg-amber-600/10 p-3">
                                 <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
                                     <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
                                     {t('transactions.loss.heading')}
@@ -698,7 +793,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                             </div>
                         )}
 
-                        <Button type="submit" className="mt-4 w-full" disabled={processing}>
+                        <Button type="submit" className="w-full" disabled={processing}>
                             {processing && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
                             {t('transactions.exchange.record')}
                         </Button>
@@ -801,6 +896,38 @@ function trimTrailingZeros(rate: string): string {
 
 function toMoney(payload: MoneyPayload) {
     return { amount: payload.amount, currency: payload.currency };
+}
+
+/**
+ * One half of the calculation.
+ *
+ * The tone is a border and a tint, and it is the *last* thing that says which half
+ * this is: the icon and the heading say it first, and both survive a monochrome
+ * screen, a colour-blind reader and a screen reader. Section 13.
+ */
+function Panel({ tone, icon, title, children }: { tone: 'cost' | 'profit'; icon: React.ReactNode; title: string; children: React.ReactNode }) {
+    // A <section> is only a landmark once it has a name, and naming it from the heading
+    // it already shows beats an aria-label repeating the same words.
+    const headingId = useId();
+
+    const tones = {
+        cost: 'border-red-600/40 bg-red-600/5 text-red-800 dark:border-red-500/40 dark:text-red-300',
+        profit: 'border-green-600/40 bg-green-600/5 text-green-800 dark:border-green-500/40 dark:text-green-300',
+    } as const;
+
+    return (
+        <section aria-labelledby={headingId} className={'rounded-xl border p-4 ' + tones[tone]}>
+            <h3 id={headingId} className="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+                {icon}
+                {title}
+            </h3>
+
+            {/* The figures themselves stay in the ordinary text colour. Tinting an
+                amount to match its panel makes every number on the screen look like a
+                status, and one of them is the answer. */}
+            <dl className="text-foreground space-y-2 text-sm">{children}</dl>
+        </section>
+    );
 }
 
 function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {

@@ -23,8 +23,14 @@ enum SpreadType: string
     /** A percentage of the value exchanged. 0.02 entered here would be 0.02%, not 2%. */
     case Percentage = 'percentage';
 
-    /** A flat amount of profit for the whole deal, regardless of size. */
-    case FixedAmount = 'fixed_amount';
+    /*
+     * There was a third case, FixedAmount — a flat sum for the whole deal. It computed
+     * `customer value − the figure typed`, which is character for character what
+     * ProfitMethod::FixedAmount already did. Two routes to one arithmetic, presented as
+     * a choice, is a question with no right answer: an operator picking between "Fixed
+     * amount" in one list and "A flat amount for the deal" in another was choosing
+     * nothing. Removed in favour of the profit method.
+     */
 
     /** @return list<string> */
     public static function values(): array

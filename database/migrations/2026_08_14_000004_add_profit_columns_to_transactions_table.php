@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 use App\Domain\Exchange\ProfitCalculator;
 use App\Domain\Money\Money;
-use App\Enums\ProfitMethod;
-use App\Enums\ProfitStatus;
-use App\Enums\SpreadType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -51,10 +48,15 @@ return new class extends Migration
             $table->index('profit_status');
         });
 
+        // Written out rather than read from the enums. A migration describes the schema
+        // at the moment it ran; one that asks the application what it believes today
+        // builds a different database on a fresh install than the one every existing
+        // install actually has. SpreadType has since lost a case — see the migration
+        // that narrows this constraint.
         foreach ([
-            ['profit_method', ProfitMethod::values()],
-            ['profit_status', ProfitStatus::values()],
-            ['spread_type', SpreadType::values()],
+            ['profit_method', ['rate_difference', 'fixed_amount', 'percentage', 'manual', 'none']],
+            ['profit_status', ['estimated', 'finalised']],
+            ['spread_type', ['per_unit', 'percentage', 'fixed_amount']],
         ] as [$column, $allowed]) {
             DB::statement(sprintf(
                 "ALTER TABLE transactions ADD CONSTRAINT chk_transactions_%s CHECK (%s IS NULL OR %s IN ('%s'))",

@@ -19,7 +19,9 @@ return [
         'profit' => 'Profit',
         'profit_method' => 'How the margin is worked out',
         'cost_rate' => 'Cost rate',
-        'cost_rate_hint' => 'What the delivered currency actually cost you, per unit.',
+        'cost_rate_hint' => 'What the delivered currency actually cost you. The units are written beside the box — check them against what you charged.',
+        'cost_rate_flipped' => 'Careful: the rate above is quoted 1 :dealBase = … :dealQuote. This box is the other way round, per unit delivered.',
+        'customer_rate_inline' => 'Charged',
         'spread_type' => 'The spread value means',
         'spread_value' => 'Spread',
         'fees' => 'Fees charged',
@@ -64,6 +66,9 @@ return [
         'net_profit' => 'Net profit',
         'awaiting' => 'Fill in both amounts to see the calculation.',
         'per_unit' => 'per unit delivered',
+        'cost_side' => 'What it cost',
+        'profit_side' => 'What you made',
+        'loss_side' => 'What you lost',
     ],
 
     'loss' => [
@@ -160,7 +165,6 @@ return [
     'spread_types' => [
         'per_unit' => 'Currency units per unit delivered',
         'percentage' => 'A percentage of the value',
-        'fixed_amount' => 'A flat amount for the deal',
     ],
 
     'spread_warning' => 'Say which you mean: 0.02 as units per unit is a very different margin from 0.02 per cent.',

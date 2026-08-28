@@ -216,11 +216,29 @@ describe('which way round the deal is', () => {
     });
 });
 
+/**
+ * The row a given rate input sits in.
+ *
+ * "1 X = [ ] Y" appears twice on the page now — once for the deal rate and once for
+ * the cost rate — so an assertion that searches the whole document for it finds both
+ * and tells you about neither.
+ */
+function rowAround(label: string): HTMLElement {
+    const row = screen.getByLabelText(label).closest('div.flex');
+
+    if (!(row instanceof HTMLElement)) {
+        throw new Error(`No row found around the input labelled ${label}.`);
+    }
+
+    return row;
+}
+
 describe('which way round the rate is', () => {
     it('quotes against the currency being traded by default', () => {
         render(<ExchangeCreate {...props} />);
 
-        expect(screen.getByText('1 USD =').parentElement).toHaveTextContent('EGP');
+        expect(rowAround('transactions.exchange.rate')).toHaveTextContent('1 USD =');
+        expect(rowAround('transactions.exchange.rate')).toHaveTextContent('EGP');
     });
 
     // A dealer quotes whichever way the market does. "1 EUR = 54.20 EGP" is how the
@@ -232,7 +250,7 @@ describe('which way round the rate is', () => {
             fireEvent.click(screen.getByLabelText('transactions.exchange.swap_rate'));
         });
 
-        expect(screen.getByText('1 EGP =')).toBeInTheDocument();
+        expect(rowAround('transactions.exchange.rate')).toHaveTextContent('1 EGP =');
     });
 
     it('clears a rate that no longer means what it did', async () => {
@@ -245,5 +263,34 @@ describe('which way round the rate is', () => {
         });
 
         expect(screen.getByLabelText('transactions.exchange.rate')).toHaveValue('');
+    });
+});
+
+/**
+ * The cost rate is per unit *delivered*, always.
+ *
+ * The deal rate above it can be quoted either way round at the operator's choice. The
+ * cost rate cannot follow it: the ledger holds cost per unit delivered, and inverting
+ * it would mean dividing. So it states its own orientation on screen, and keeps
+ * stating the same one after the deal rate has been turned over.
+ */
+describe('the cost rate', () => {
+    it('says which way round it is', () => {
+        render(<ExchangeCreate {...props} />);
+
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('1 EGP =');
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('USD');
+    });
+
+    it('does not turn over when the deal rate does', async () => {
+        render(<ExchangeCreate {...props} />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByLabelText('transactions.exchange.swap_rate'));
+        });
+
+        expect(rowAround('transactions.exchange.rate')).toHaveTextContent('1 EGP =');
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('1 EGP =');
+        expect(rowAround('transactions.exchange.cost_rate')).toHaveTextContent('USD');
     });
 });

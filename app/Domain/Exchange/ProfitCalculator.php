@@ -153,12 +153,6 @@ final class ProfitCalculator
                 null,
                 $customerValue->minus($this->percentageOf($customerValue, $value)),
             ],
-
-            // A flat figure, regardless of size.
-            SpreadType::FixedAmount => [
-                null,
-                $customerValue->minus(Money::of($value, $input->profitCurrency()->spec())),
-            ],
         };
     }
 

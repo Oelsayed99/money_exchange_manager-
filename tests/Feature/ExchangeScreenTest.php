@@ -89,17 +89,21 @@ describe('the form', function (): void {
                 ->has('currencies', 4)
                 ->has('accounts', 2)
                 ->has('profitMethods', 5)
-                ->has('spreadTypes', 3)
+                ->has('spreadTypes', 2)
                 ->has('methods', 5)
             );
     });
 
     // Section 3: a spread is never a bare number.
-    it('sends what each spread type means', function (): void {
+    //
+    // Two meanings, not three. `fixed_amount` was removed: it computed the customer
+    // value less the figure typed, which is what ProfitMethod::FixedAmount already
+    // does, so the operator was choosing between two spellings of one calculation.
+    it('sends what each spread type means, and offers no duplicate of a profit method', function (): void {
         $props = $this->actingAs($this->operator)->get('/exchange')->viewData('page')['props'];
 
         expect(collect($props['spreadTypes'])->pluck('value')->all())
-            ->toBe(['per_unit', 'percentage', 'fixed_amount']);
+            ->toBe(['per_unit', 'percentage']);
     });
 });
 
