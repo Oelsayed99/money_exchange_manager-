@@ -1,15 +1,17 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { AnchorHTMLAttributes } from 'react';
 import { AppSidebar } from './app-sidebar';
 import { SidebarProvider } from './ui/sidebar';
 
 const page = vi.hoisted(() => ({
+    // NavMain reads this to decide which entry is the current one.
+    url: '/dashboard',
     props: {
         locale: 'en',
         direction: 'ltr' as 'ltr' | 'rtl',
         locales: [{ code: 'en', native: 'English', direction: 'ltr' }],
         translations: {
-            nav: { dashboard: 'Dashboard', currencies: 'Currencies' },
+            nav: { dashboard: 'Dashboard', currencies: 'Currencies', record: 'Record' },
             common: { language: 'Language' },
         },
         auth: { user: { name: 'Test', email: 't@example.com' }, permissions: [] as string[] },
@@ -19,7 +21,14 @@ const page = vi.hoisted(() => ({
 vi.mock('@inertiajs/react', () => ({
     usePage: () => page,
     router: { on: vi.fn(), put: vi.fn() },
-    Link: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a>,
+    // Spreads what it is given. SidebarMenuButton renders through the link with
+    // asChild, so a stub that keeps only href swallows the very attribute that says
+    // which entry is the current one.
+    Link: ({ children, prefetch, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { prefetch?: boolean }) => {
+        void prefetch;
+
+        return <a {...props}>{children}</a>;
+    },
 }));
 
 function renderSidebar() {
@@ -41,6 +50,7 @@ function sidebarElement(): HTMLElement {
 }
 
 beforeEach(() => {
+    page.url = '/dashboard';
     page.props.direction = 'ltr';
     page.props.auth.permissions = [];
 });
@@ -89,5 +99,38 @@ describe('AppSidebar navigation', () => {
         renderSidebar();
 
         expect(screen.getByText('Currencies')).toBeInTheDocument();
+    });
+});
+
+describe('AppSidebar current entry', () => {
+    // One entry fronts both recording routes. Comparing the current URL to the entry's
+    // own url alone would leave nothing at all marked while recording a movement.
+    it.each(['/exchange', '/movements'])('marks the recording entry current at %s', (url) => {
+        page.url = url;
+        page.props.auth.permissions = ['transactions.record'];
+
+        renderSidebar();
+
+        expect(screen.getByText('Record').closest('a')).toHaveAttribute('data-active', 'true');
+    });
+
+    // The query string is part of page.url. Comparing it whole left the entry unmarked
+    // the moment the operator applied a filter.
+    it('marks an entry current even when a filter is applied', () => {
+        page.url = '/exchange?from=USD';
+        page.props.auth.permissions = ['transactions.record'];
+
+        renderSidebar();
+
+        expect(screen.getByText('Record').closest('a')).toHaveAttribute('data-active', 'true');
+    });
+
+    it('marks nothing current on a page that is not in the navigation', () => {
+        page.url = '/settings/profile';
+        page.props.auth.permissions = ['transactions.record'];
+
+        renderSidebar();
+
+        expect(screen.getByText('Record').closest('a')).toHaveAttribute('data-active', 'false');
     });
 });

@@ -16,7 +16,6 @@ return [
         'method' => 'طريقة الحركة',
         'occurred_at' => 'التاريخ',
         'reference' => 'المرجع',
-        'description' => 'ملاحظات',
         'profit' => 'الربح',
         'profit_method' => 'طريقة احتساب الهامش',
         'cost_rate' => 'سعر التكلفة',

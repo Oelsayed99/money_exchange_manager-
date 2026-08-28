@@ -7,6 +7,8 @@ import { useState } from 'react';
 // response to typing, so a stub that does not actually hold state would test nothing.
 vi.mock('@inertiajs/react', () => ({
     Head: () => null,
+    // The heading offers a link to the other recording form.
+    Link: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a>,
     useForm: <T extends Record<string, unknown>>(initial: T) => {
         const [data, setState] = useState<T>(initial);
 

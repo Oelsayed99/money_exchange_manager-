@@ -2,6 +2,7 @@ import { FlashMessage } from '@/components/flash-message';
 import InputError from '@/components/input-error';
 import { MoneyDisplay } from '@/components/money-display';
 import { MoneyInput } from '@/components/money-input';
+import { RecordHeading } from '@/components/record-heading';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -345,10 +346,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
             <div className="flex flex-col gap-6 p-4">
                 <FlashMessage />
 
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-semibold tracking-tight">{t('transactions.exchange.title')}</h1>
-                    <p className="text-muted-foreground max-w-2xl text-sm">{t('transactions.exchange.description')}</p>
-                </div>
+                <RecordHeading current="exchange" />
 
                 <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
                     <div className="space-y-6">

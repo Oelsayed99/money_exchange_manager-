@@ -16,7 +16,6 @@ return [
         'method' => 'How the money moved',
         'occurred_at' => 'Date',
         'reference' => 'Reference',
-        'description' => 'Notes',
         'profit' => 'Profit',
         'profit_method' => 'How the margin is worked out',
         'cost_rate' => 'Cost rate',

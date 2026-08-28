@@ -131,3 +131,43 @@ it('has no Arabic string left identical to its English source', function (): voi
 
     expect($untranslated)->toBe([], 'Still in English: '.implode(', ', $untranslated));
 });
+
+/**
+ * A duplicate key is invisible to every other check here.
+ *
+ * PHP does not warn when an array literal names the same key twice; the later value
+ * simply wins and the earlier one is gone before anything can compare it. Both locales
+ * had `transactions.exchange.description` written twice, so parity passed while the
+ * exchange screen's subtitle read "Notes" for the whole of Phase 5.
+ *
+ * Counting is the only way to see it: the parser cannot report what it discarded, so
+ * this compares the keys written in the file against the keys that survived.
+ */
+it('loses no translation to a duplicate key', function (): void {
+    $countKeys = function (array $values) use (&$countKeys): int {
+        $count = 0;
+
+        foreach ($values as $value) {
+            $count++;
+
+            if (is_array($value)) {
+                $count += $countKeys($value);
+            }
+        }
+
+        return $count;
+    };
+
+    $lost = [];
+
+    foreach (glob(base_path('lang/*/*.php')) ?: [] as $file) {
+        $survived = $countKeys(require $file);
+        $written = preg_match_all("/^\\s*'[^']+'\\s*=>/m", (string) file_get_contents($file));
+
+        if ($written !== $survived) {
+            $lost[] = basename(dirname($file)).'/'.basename($file).' ('.($written - $survived).')';
+        }
+    }
+
+    expect($lost)->toBe([], 'Keys written more than once, so the earlier value is discarded: '.implode(', ', $lost));
+});

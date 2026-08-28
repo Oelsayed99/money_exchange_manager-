@@ -20,6 +20,14 @@ export interface NavItem {
     title: string;
     url: string;
     icon?: LucideIcon | null;
+    /**
+     * Other paths this entry stands for.
+     *
+     * One entry can front more than one route — the recording screen is reached at
+     * both /exchange and /movements — and without this the sidebar would highlight
+     * nothing for half of them.
+     */
+    matches?: string[];
     isActive?: boolean;
 }
 

@@ -6,7 +6,7 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { ArrowLeftRight, ArrowRightLeft, Coins, Landmark, LayoutGrid, ReceiptText, Scale, ShieldCheck, Users } from 'lucide-react';
+import { ArrowLeftRight, Coins, Landmark, LayoutGrid, ReceiptText, Scale, ShieldCheck, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
@@ -23,8 +23,10 @@ export function AppSidebar() {
         },
         // Navigation reflects permissions so a user is not sent to a page that will
         // refuse them. The route is guarded regardless.
-        ...(can('transactions.record') ? [{ title: t('nav.movements'), url: '/movements', icon: ArrowRightLeft }] : []),
-        ...(can('transactions.record') ? [{ title: t('nav.exchange'), url: '/exchange', icon: ArrowLeftRight }] : []),
+        // Exchange and the other movements are one screen with a switch in its heading,
+        // so one entry here rather than two. It opens on the exchange because that is
+        // what a money-exchange business does all day; the heading offers the other.
+        ...(can('transactions.record') ? [{ title: t('nav.record'), url: '/exchange', matches: ['/movements'], icon: ArrowLeftRight }] : []),
         ...(can('transactions.view') ? [{ title: t('nav.transactions'), url: '/transactions', icon: ReceiptText }] : []),
         ...(can('reconciliations.view') ? [{ title: t('nav.reconciliations'), url: '/reconciliations', icon: Scale }] : []),
         ...(can('accounts.view') ? [{ title: t('nav.accounts'), url: '/accounts', icon: Landmark }] : []),

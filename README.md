@@ -23,6 +23,7 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0005](docs/adr/0005-no-rounding.md) | Nothing rounds — supersedes parts of 0003 |
 | [0006](docs/adr/0006-roles-and-permissions.md) | Enum-backed roles and permissions |
 | [0024](docs/adr/0024-brand-assets.md) | Brand assets, the theme-aware wordmark, and what checks them |
+| [0025](docs/adr/0025-one-recording-screen.md) | One recording screen, switched from its heading |
 
 ### Money is a decimal string, not integer minor units
 

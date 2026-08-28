@@ -14,7 +14,10 @@ test.beforeEach(async ({ page }) => {
 
 test('shows a client the credit they have left with us, labelled rather than signed', async ({ page }) => {
     await page.goto('/counterparties');
-    await page.getByRole('row', { name: new RegExp(CLIENT) }).getByRole('link', { name: 'Statement' }).click();
+    await page
+        .getByRole('row', { name: new RegExp(CLIENT) })
+        .getByRole('link', { name: 'Statement' })
+        .click();
 
     await expect(page).toHaveURL(/statement/);
 
@@ -48,7 +51,10 @@ test('records a settlement and moves the position by exactly that much', async (
 
     // And the statement agrees: 3,957,540 in, 2,574,000 out, 1,383,540 left.
     await page.goto('/counterparties');
-    await page.getByRole('row', { name: new RegExp(CLIENT) }).getByRole('link', { name: 'Statement' }).click();
+    await page
+        .getByRole('row', { name: new RegExp(CLIENT) })
+        .getByRole('link', { name: 'Statement' })
+        .click();
 
     await expect(page.getByText(grouped('1383540.00')).first()).toBeVisible();
 });

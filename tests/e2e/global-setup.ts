@@ -19,8 +19,6 @@ export default function globalSetup(): void {
             env: { ...process.env, DB_DATABASE: DATABASE },
         });
 
-    run(
-        `mysql -e "CREATE DATABASE IF NOT EXISTS ${DATABASE} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"`,
-    );
+    run(`mysql -e "CREATE DATABASE IF NOT EXISTS ${DATABASE} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"`);
     run(`DB_DATABASE=${DATABASE} php artisan migrate:fresh --seed --seeder=E2eSeeder --force`);
 }

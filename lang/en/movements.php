@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 return [
     'title' => 'Record a movement',
-    'description' => 'Credit in and out, lending and borrowing, settlements, transfers, fees and expenses. Currency exchange has its own screen.',
+    'description' => 'Credit in and out, lending and borrowing, settlements, transfers, fees and expenses.',
 
     'type' => 'What happened',
     'occurred_at' => 'Date',
