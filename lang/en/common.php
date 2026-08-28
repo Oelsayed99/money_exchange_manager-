@@ -17,4 +17,10 @@ return [
     'currency' => 'Currency',
     'export_csv' => 'Download CSV',
     'skip_to_content' => 'Skip to content',
+
+    'welcome' => [
+        'tagline' => 'Every exchange and every balance, kept in the currency it was made in.',
+        'enter' => 'Open the dashboard',
+        'sign_in' => 'Sign in',
+    ],
 ];

@@ -1,4 +1,5 @@
 import AppLogoIcon from '@/components/app-logo-icon';
+import AppWordmark from '@/components/app-wordmark';
 import { Link } from '@inertiajs/react';
 
 interface AuthLayoutProps {
@@ -14,11 +15,13 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
             <div className="w-full max-w-sm">
                 <div className="flex flex-col gap-8">
                     <div className="flex flex-col items-center gap-4">
-                        <Link href={route('home')} className="flex flex-col items-center gap-2 font-medium">
-                            <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md">
-                                <AppLogoIcon className="size-9 fill-current text-[var(--foreground)] dark:text-white" />
-                            </div>
-                            <span className="sr-only">{title}</span>
+                        {/* The full lockup rather than the mark alone. This is the first
+                            screen of the day and often the only one a new member of staff
+                            has seen, so it is the one place worth naming the application
+                            outright. The wordmark's alt text is what names this link. */}
+                        <Link href={route('home')} className="flex flex-col items-center gap-3 font-medium">
+                            <AppLogoIcon className="size-14" />
+                            <AppWordmark className="h-6" />
                         </Link>
 
                         <div className="space-y-2 text-center">

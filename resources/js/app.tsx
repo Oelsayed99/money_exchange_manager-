@@ -42,7 +42,7 @@ async function resolvePage(name: string) {
     }
 }
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'MonyMonk';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,

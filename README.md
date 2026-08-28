@@ -1,8 +1,8 @@
-# Money Exchange Manager
+# MonyMonk
 
 A currency exchange and ledger management application built on **Laravel 12 + Inertia + React + TypeScript**, with a domain layer designed so that money is never silently wrong.
 
-> **Status:** in active development. Phase 1 (foundation, currencies, localisation, access control) is complete.
+> **Status:** all seven phases complete. See [`docs/HANDOFF.md`](docs/HANDOFF.md) for what was deliberately left undone.
 
 ---
 
@@ -22,6 +22,7 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0004](docs/adr/0004-localization-and-rtl.md) | Localisation and RTL |
 | [0005](docs/adr/0005-no-rounding.md) | Nothing rounds — supersedes parts of 0003 |
 | [0006](docs/adr/0006-roles-and-permissions.md) | Enum-backed roles and permissions |
+| [0024](docs/adr/0024-brand-assets.md) | Brand assets, the theme-aware wordmark, and what checks them |
 
 ### Money is a decimal string, not integer minor units
 

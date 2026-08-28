@@ -38,6 +38,15 @@
        content, which pulls both ends of a header or footer into the middle of the
        page. Only visible in the right-to-left layout, where nothing is anchored left.
     */
+    table.brand { width: 100%; margin-bottom: 5pt; }
+    table.brand td.mark { width: 8%; }
+    table.brand td.who { width: 92%; }
+    /* Fixed sides, not direction-dependent ones: the mark and the wordmark are one
+       lockup and have to stay against each other, so in Arabic the pair moves to the
+       right edge together rather than each taking the far side of the page. */
+    table.brand td.hug-left { text-align: left; }
+    table.brand td.hug-right { text-align: right; }
+
     table.layout { width: 100%; }
     table.layout td.main { width: 70%; }
     table.layout td.side { width: 30%; }
@@ -70,6 +79,23 @@
 </htmlpagefooter>
 
 <sethtmlpagefooter name="pageFooter" value="on" />
+
+{{-- Whose document this is. A statement leaves the building, and without this it is
+     a table of figures carrying the client's name and nothing saying who produced it.
+
+     Same dir="ltr" trick as the footer: the table is laid out left-to-right and the
+     cells are written in the order the language wants them. --}}
+<table class="brand" dir="ltr">
+    <tr>
+        @if ($rtl)
+            <td class="who hug-right"><img src="{{ $brandWordmark }}" style="width: 32mm;" /></td>
+            <td class="mark hug-left"><img src="{{ $brandIcon }}" style="width: 11mm;" /></td>
+        @else
+            <td class="mark hug-left"><img src="{{ $brandIcon }}" style="width: 11mm;" /></td>
+            <td class="who hug-left"><img src="{{ $brandWordmark }}" style="width: 32mm;" /></td>
+        @endif
+    </tr>
+</table>
 
 <table class="layout" dir="ltr">
     <tr>

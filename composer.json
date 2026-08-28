@@ -1,11 +1,12 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "monymonk/monymonk",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "MonyMonk — multi-currency exchange and ledger management.",
     "keywords": [
-        "laravel",
-        "framework"
+        "exchange",
+        "ledger",
+        "multi-currency"
     ],
     "license": "MIT",
     "require": {

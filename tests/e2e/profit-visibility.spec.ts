@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CLIENT, grouped, signIn, switchTo } from './support';
+import { grouped, signIn, switchTo } from './support';
 
 /**
  * What a client's copy must never contain.

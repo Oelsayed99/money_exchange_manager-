@@ -47,6 +47,11 @@ final class StatementPdf
         return View::make('pdf.counterparty-statement', [
             'statement' => $statement,
             'rtl' => App::currentLocale() === 'ar',
+            // A filesystem path, not a URL. mPDF would have to fetch a URL over the
+            // network to draw it, which makes rendering a statement depend on the
+            // server being able to reach itself.
+            'brandIcon' => public_path('brand/icon.png'),
+            'brandWordmark' => public_path('brand/wordmark-light.png'),
         ])->render();
     }
 
@@ -73,7 +78,7 @@ final class StatementPdf
             ]);
 
             $pdf->SetTitle($this->filenames->title($statement));
-            $pdf->SetAuthor(config('app.name', 'Finance'));
+            $pdf->SetAuthor(config('app.name', 'MonyMonk'));
 
             // A client copy that reaches the wrong desk should still say what it is.
             $pdf->SetCreator($statement->mode->label());

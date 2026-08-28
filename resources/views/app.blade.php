@@ -4,7 +4,24 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        {{-- Matches the two background colours set below, so the mobile browser chrome
+             follows the theme instead of framing a dark page in white. --}}
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+
+        <title inertia>{{ config('app.name', 'MonyMonk') }}</title>
+
+        {{--
+            The .ico carries 16/32/48 for the tab and for Windows; the 96 png is what
+            modern browsers pick up. There is a favicon.svg in the supplied set, but it
+            is a 940 kB raster wrapped in an <svg> element rather than a drawing — it
+            would be downloaded on every cold load to render at 16 pixels, so it is not
+            linked here.
+        --}}
+        <link rel="icon" href="/favicon.ico" sizes="32x32">
+        <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        <link rel="manifest" href="/site.webmanifest">
 
         {{--
             Theme is applied here, synchronously, before anything paints.

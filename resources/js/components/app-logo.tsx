@@ -1,13 +1,13 @@
 import AppLogoIcon from './app-logo-icon';
+import AppWordmark from './app-wordmark';
 
+/** The mark and the wordmark together, as the sidebar and the header show them. */
 export default function AppLogo() {
     return (
         <>
-            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-md">
-                <AppLogoIcon className="size-5 fill-current text-white dark:text-black" />
-            </div>
-            <div className="ms-1 grid flex-1 text-start text-sm">
-                <span className="mb-0.5 truncate leading-none font-semibold">Laravel Starter Kit</span>
+            <AppLogoIcon className="size-8 shrink-0" />
+            <div className="ms-1 grid flex-1 text-start">
+                <AppWordmark className="h-4" />
             </div>
         </>
     );
