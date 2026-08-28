@@ -75,14 +75,29 @@ initializeTheme();
  * Done as a router subscription rather than a hook so it applies to every page,
  * including any that do not use a shared layout.
  */
-router.on('success', (event) => {
-    const props = event.detail.page.props as { locale?: string; direction?: string };
+function applyLocale(page: { props: Record<string, unknown> }): void {
+    const { locale, direction } = page.props as { locale?: string; direction?: string };
 
-    if (props.direction) {
-        document.documentElement.dir = props.direction;
+    if (direction) {
+        document.documentElement.dir = direction;
     }
 
-    if (props.locale) {
-        document.documentElement.lang = props.locale;
+    if (locale) {
+        document.documentElement.lang = locale;
     }
-});
+}
+
+/*
+    Both events, because they cover different journeys.
+
+    `success` fires when a request comes back. `navigate` fires whenever the page
+    changes, including the browser's back and forward buttons — which restore a cached
+    page without making a request, so `success` never fires for them.
+
+    Switching to Arabic and pressing back used to leave a page half turned over: React
+    re-rendered from the restored props, so the sidebar moved to the other side, while
+    `dir` stayed on the html element at whatever the last request had set it to and every
+    logical property in the layout kept resolving the old way.
+*/
+router.on('success', (event) => applyLocale(event.detail.page));
+router.on('navigate', (event) => applyLocale(event.detail.page));

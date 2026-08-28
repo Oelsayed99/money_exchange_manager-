@@ -116,3 +116,59 @@ test('keeps what you had typed into a form', async ({ page }) => {
     await expect(page.getByLabel('السعر', { exact: true })).toHaveValue('51.48');
     await expect(page.getByLabel('المرجع')).toHaveValue('KEEP-ME');
 });
+
+/**
+ * A rate quotation is one formula, not three fragments.
+ *
+ * In Arabic the row itself flows right-to-left, so marking only the pieces as
+ * left-to-right put the equals sign at the far right — against the label rather than
+ * against the box — because "=" is the last character of "1 USD =" and therefore its
+ * rightmost. Reported by the owner as "= 1 usd [number] eur".
+ *
+ * Asserting the structure rather than the pixels: the currency codes, the sign and the
+ * input have to sit inside one left-to-right run.
+ */
+test('keeps a rate quotation in one direction', async ({ page }) => {
+    await switchTo(page, 'ar');
+    await page.goto('/exchange');
+
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+
+    for (const label of ['السعر', 'سعر التكلفة']) {
+        const quotation = page.locator('[dir="ltr"]').filter({ has: page.getByLabel(label, { exact: true }) });
+
+        await expect(quotation).toHaveCount(1);
+        await expect(quotation).toContainText('1 USD =');
+        await expect(quotation).toContainText('EUR');
+    }
+});
+
+/**
+ * The back button, after a language switch.
+ *
+ * Inertia restores a cached page without making a request, so the `success` event never
+ * fires — and the html element kept whatever direction the last *request* had set.
+ * React meanwhile re-rendered from the restored props, so the sidebar moved to the other
+ * side while every logical property in the layout went on resolving the old way: a page
+ * half turned over, which is what the owner saw.
+ */
+test('does not leave the page half turned over when you go back', async ({ page }) => {
+    // Two pages visited in Arabic, so there is an Arabic entry to come back to. The
+    // switch itself replaces its own history entry — it is a redirect to the same URL —
+    // so it is the page before it that back restores.
+    await switchTo(page, 'ar');
+    await page.goto('/exchange');
+    await page.goto('/dashboard');
+
+    await switchTo(page, 'en');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+    await expect(sidebar(page)).toHaveAttribute('data-side', 'left');
+
+    // Back to the exchange, which was cached in Arabic. The sidebar follows the restored
+    // props; before the fix `dir` did not, and the two disagreed.
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/exchange$/);
+    await expect(sidebar(page)).toHaveAttribute('data-side', 'right');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+});

@@ -443,24 +443,30 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
                             <InputError message={errors.delivered_currency_id} />
 
-                            {/* The rate, stated the way a dealer states it. */}
+                            {/* The rate, stated the way a dealer states it.
+                                The quotation is one formula, so the whole of it is a
+                                left-to-right island rather than three of them. Marking
+                                only the pieces left the row flowing right-to-left in
+                                Arabic, which put the equals sign against the label — "=
+                                1 USD [box] EUR" — because "=" is the last character of a
+                                left-to-right run and therefore its rightmost. Latin
+                                currency codes and a number read one way in both
+                                languages; only the label beside them turns over. */}
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-medium">{t('transactions.exchange.rate')}</span>
-                                <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                    1 {baseCode} =
-                                </span>
-                                <MoneyInput
-                                    value={rate}
-                                    onChange={(v) => {
-                                        setLastEdited('rate');
-                                        setRate(v);
-                                    }}
-                                    className="w-40"
-                                    aria-label={t('transactions.exchange.rate')}
-                                />
-                                <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                    {quoteCode}
-                                </span>
+                                <div className="flex items-center gap-2" dir="ltr">
+                                    <span className="text-muted-foreground font-mono text-sm">1 {baseCode} =</span>
+                                    <MoneyInput
+                                        value={rate}
+                                        onChange={(v) => {
+                                            setLastEdited('rate');
+                                            setRate(v);
+                                        }}
+                                        className="w-40"
+                                        aria-label={t('transactions.exchange.rate')}
+                                    />
+                                    <span className="text-muted-foreground font-mono text-sm">{quoteCode}</span>
+                                </div>
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -555,19 +561,16 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                 <div className="grid gap-2">
                                     <Label htmlFor="cost_rate">{t('transactions.exchange.cost_rate')}</Label>
 
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                            1 {baseCode} =
-                                        </span>
+                                    {/* One left-to-right island, as the deal rate above. */}
+                                    <div className="flex flex-wrap items-center gap-2" dir="ltr">
+                                        <span className="text-muted-foreground font-mono text-sm">1 {baseCode} =</span>
                                         <MoneyInput
                                             id="cost_rate"
                                             value={data.cost_rate}
                                             onChange={(v) => setData('cost_rate', v)}
                                             className="w-40"
                                         />
-                                        <span className="text-muted-foreground font-mono text-sm" dir="ltr">
-                                            {quoteCode}
-                                        </span>
+                                        <span className="text-muted-foreground font-mono text-sm">{quoteCode}</span>
                                     </div>
 
                                     {/* What was charged, in the box's own units. The

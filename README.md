@@ -26,6 +26,7 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0025](docs/adr/0025-one-recording-screen.md) | One recording screen, switched from its heading |
 | [0026](docs/adr/0026-the-profit-section.md) | The profit section: one flat-margin route, a stated cost rate, two halves |
 | [0027](docs/adr/0027-which-leg-carries-the-margin.md) | Which leg carries the margin — buying, without a reciprocal |
+| [0028](docs/adr/0028-rtl-and-the-back-button.md) | RTL quotations, the back button, and testing the built assets |
 
 ### Money is a decimal string, not integer minor units
 
