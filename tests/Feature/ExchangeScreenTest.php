@@ -88,22 +88,34 @@ describe('the form', function (): void {
                 ->component('exchange/create')
                 ->has('currencies', 4)
                 ->has('accounts', 2)
-                ->has('profitMethods', 5)
-                ->has('spreadTypes', 2)
+                ->has('profitMethods', 6)
                 ->has('methods', 5)
             );
     });
 
-    // Section 3: a spread is never a bare number.
+    // Section 3: a margin is never a bare number, and the operator is asked once.
     //
-    // Two meanings, not three. `fixed_amount` was removed: it computed the customer
-    // value less the figure typed, which is what ProfitMethod::FixedAmount already
-    // does, so the operator was choosing between two spellings of one calculation.
-    it('sends what each spread type means, and offers no duplicate of a profit method', function (): void {
+    // Both readings of 0.02 are methods in the one list. There is no second question
+    // about what the first answer meant, and no "flat amount" spread duplicating the
+    // fixed-amount method.
+    it('offers every way of stating a margin in one list', function (): void {
         $props = $this->actingAs($this->operator)->get('/exchange')->viewData('page')['props'];
 
-        expect(collect($props['spreadTypes'])->pluck('value')->all())
-            ->toBe(['per_unit', 'percentage']);
+        expect(collect($props['profitMethods'])->pluck('value')->all())
+            ->toBe(['rate_difference', 'per_unit', 'percentage', 'fixed_amount', 'manual', 'none'])
+            ->and($props)->not->toHaveKey('spreadTypes');
+    });
+
+    // Each method says what its own figure is called, so the box is never labelled
+    // with a word that means something different depending on the method above it.
+    it('names the figure each method asks for', function (): void {
+        $props = $this->actingAs($this->operator)->get('/exchange')->viewData('page')['props'];
+        $methods = collect($props['profitMethods'])->keyBy('value');
+
+        expect($methods['per_unit']['valueLabel'])->not->toBe($methods['percentage']['valueLabel'])
+            ->and($methods['rate_difference']['needsValue'])->toBeFalse()
+            ->and($methods['per_unit']['needsValue'])->toBeTrue()
+            ->and($methods['none']['needsValue'])->toBeFalse();
     });
 });
 
@@ -136,16 +148,15 @@ describe('the live preview', function (): void {
             ->assertJsonPath('gross_profit.amount', '-26000.00');
     });
 
-    // The same number, two meanings, two answers.
-    it('distinguishes a per-unit spread from a percentage', function (): void {
+    // The same number, two meanings, two answers — two methods, since the meaning is
+    // the method rather than a follow-up question about it.
+    it('distinguishes a per-unit margin from a percentage', function (): void {
         $perUnit = $this->actingAs($this->operator)->postJson('/exchange/preview', dealPayload([
-            'profit_method' => 'percentage', 'cost_rate' => null,
-            'spread_type' => 'per_unit', 'spread_value' => '0.02',
+            'profit_method' => 'per_unit', 'cost_rate' => null, 'profit_value' => '0.02',
         ]))->json('gross_profit.amount');
 
         $percentage = $this->actingAs($this->operator)->postJson('/exchange/preview', dealPayload([
-            'profit_method' => 'percentage', 'cost_rate' => null,
-            'spread_type' => 'percentage', 'spread_value' => '0.02',
+            'profit_method' => 'percentage', 'cost_rate' => null, 'profit_value' => '0.02',
         ]))->json('gross_profit.amount');
 
         expect($perUnit)->toBe('1000.00')

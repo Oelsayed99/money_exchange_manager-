@@ -9,7 +9,6 @@ use App\Domain\Exchange\RateQuote;
 use App\Domain\Money\Decimal;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
-use App\Enums\SpreadType;
 use App\Http\Requests\ExchangeRequest;
 use App\Http\Requests\RateConversionRequest;
 use App\Models\Account;
@@ -134,19 +133,18 @@ final class ExchangeController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn (Counterparty $c): array => ['id' => $c->id, 'name' => $c->name])
                 ->all(),
+            // Each method carries what it needs and what its figure is called, so the
+            // form asks for one thing at a time instead of a method and then a second
+            // question about what the method meant.
             'profitMethods' => array_map(
                 fn (ProfitMethod $m): array => [
                     'value' => $m->value,
-                    'label' => __('transactions.profit_methods.'.$m->value),
+                    'label' => $m->label(),
                     'needsCostRate' => $m->needsCostRate(),
-                    'isStatedDirectly' => $m->isStatedDirectly(),
+                    'needsValue' => $m->needsValue(),
+                    'valueLabel' => $m->valueLabel(),
                 ],
                 ProfitMethod::cases(),
-            ),
-            // Every spread carries what it means. Section 3: 0.02 is not always 2%.
-            'spreadTypes' => array_map(
-                fn (SpreadType $t): array => ['value' => $t->value, 'label' => __('transactions.spread_types.'.$t->value)],
-                SpreadType::cases(),
             ),
             'methods' => array_map(
                 fn (MovementMethod $m): array => ['value' => $m->value, 'label' => __('transactions.methods.'.$m->value)],

@@ -44,13 +44,13 @@ test('works the deal out from a rate, and shows the margin before recording it',
 });
 
 /**
- * The calculation, in two halves.
+ * The calculation, in two cards.
  *
- * It was one column of eleven rows with the margin ninth. Cost and profit are now
- * separate panels, bordered red and green — and the colour is decoration: what makes
- * a loss legible is that the second panel renames itself.
+ * It was one column of eleven rows with the margin ninth. Profit is its own card now,
+ * and what comes off the deal — expenses, commissions paid — is its own. The colour is
+ * decoration: what makes a loss legible is that the profit card renames itself.
  */
-test('separates what the deal cost from what it made, and renames the half that lost', async ({ page }) => {
+test('separates the profit from what is taken off it, and renames the card that lost', async ({ page }) => {
     await page.getByLabel('This deal').selectOption({ label: 'I am selling' });
     await page.getByLabel('I am selling', { exact: true }).fill('50000');
     await page.getByRole('combobox', { name: 'Currency' }).first().selectOption({ label: 'USD' });
@@ -63,27 +63,62 @@ test('separates what the deal cost from what it made, and renames the half that 
     await expect(costRate.locator('xpath=../..')).toContainText('1 USD =');
     await costRate.fill('51.20');
 
-    const cost = page.getByRole('region', { name: 'What it cost' });
-    const made = page.getByRole('region', { name: 'What you made' });
+    const profit = page.getByRole('region', { name: 'Profit', exact: true });
+    const deducted = page.getByRole('region', { name: 'Taken off the deal' });
 
-    await expect(cost).toContainText(grouped('2560000.00'), { timeout: 10_000 });
-    await expect(made).toContainText(grouped('14000.00'));
+    await expect(profit).toContainText(grouped('14000.00'), { timeout: 10_000 });
+    await expect(profit).toContainText('Net profit');
 
-    // Each figure is in exactly one half. The margin was previously nine rows below
-    // the cost it was derived from.
-    await expect(cost).not.toContainText('Net profit');
-    await expect(made).not.toContainText('Cost value');
+    // Expenses and commissions are what comes off, and they are not in with the margin.
+    await expect(deducted).toContainText('Expenses');
+    await expect(deducted).toContainText('Commissions');
+    await expect(profit).not.toContainText('Expenses');
 
     // What was charged, printed in the cost rate's own units, so the difference the
     // method is named after can be read rather than worked out.
     await expect(page.getByText('Charged', { exact: true })).toBeVisible();
     await expect(page.getByText('1 USD = 51.480000000000 EGP')).toBeVisible();
 
-    // Turn it into a loss: the second half renames itself rather than only recolouring.
+    // Turn it into a loss: the card renames itself rather than only recolouring.
     await costRate.fill('51.90');
 
-    await expect(page.getByRole('region', { name: 'What you lost' })).toBeVisible({ timeout: 10_000 });
-    await expect(made).toBeHidden();
+    await expect(page.getByRole('region', { name: 'Loss', exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(profit).toBeHidden();
+});
+
+/**
+ * Both readings of Section 3's 0.02, chosen once.
+ *
+ * There is no second question about what the number meant: the reading is the method,
+ * and the box beneath is named by whichever was picked.
+ */
+test('offers each way of stating a margin as its own method', async ({ page }) => {
+    await page.getByLabel('This deal').selectOption({ label: 'I am selling' });
+    await page.getByLabel('I am selling', { exact: true }).fill('50000');
+    await page.getByRole('combobox', { name: 'Currency' }).first().selectOption({ label: 'USD' });
+    await page.getByRole('combobox', { name: 'Currency' }).last().selectOption({ label: 'EGP' });
+    await page.getByLabel('Rate', { exact: true }).fill('51.48');
+    await expect(page.getByLabel('Paid in')).toHaveValue('2574000.00', { timeout: 10_000 });
+
+    const method = page.getByLabel('How the margin is worked out');
+
+    await method.selectOption({ label: 'Currency units per unit delivered' });
+    await page.getByLabel('Margin per unit delivered').fill('0.28');
+
+    const profit = page.getByRole('region', { name: 'Profit', exact: true });
+
+    // 0.28 EGP of margin on each of 50,000 dollars.
+    await expect(profit).toContainText(grouped('14000.00'), { timeout: 10_000 });
+
+    // The same number read as a percentage is a different deal entirely, and picking
+    // that reading is picking a different method rather than answering a follow-up.
+    await method.selectOption({ label: 'A percentage of the value' });
+    await page.getByLabel('Percentage of the value').fill('0.28');
+
+    await expect(profit).toContainText(grouped('7207.20'), { timeout: 10_000 });
+
+    // Nothing anywhere asks what the figure meant.
+    await expect(page.getByText('The spread value means')).toBeHidden();
 });
 
 test('warns before recording a deal that loses money, and refuses until it is confirmed', async ({ page }) => {

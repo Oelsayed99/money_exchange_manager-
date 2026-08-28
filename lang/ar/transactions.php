@@ -22,8 +22,6 @@ return [
         'cost_rate_hint' => 'ما كلّفتك فعليًا العملة المسلَّمة. الوحدات مكتوبة بجانب الخانة — قارنها بما حصّلته.',
         'cost_rate_flipped' => 'انتبه: السعر أعلاه مكتوب 1 :dealBase = … :dealQuote، وهذه الخانة بالاتجاه المعاكس، لكل وحدة مسلَّمة.',
         'customer_rate_inline' => 'المحصَّل',
-        'spread_type' => 'قيمة الفارق تعني',
-        'spread_value' => 'الفارق',
         'fees' => 'رسوم محصّلة',
         'expenses' => 'مصروفات',
         'commissions' => 'عمولات مدفوعة',
@@ -65,9 +63,9 @@ return [
         'net_profit' => 'صافي الربح',
         'awaiting' => 'أدخل المبلغين لعرض الحساب.',
         'per_unit' => 'لكل وحدة مسلَّمة',
-        'cost_side' => 'ما كلّفك',
-        'profit_side' => 'ما ربحته',
-        'loss_side' => 'ما خسرته',
+        'profit_side' => 'الربح',
+        'loss_side' => 'الخسارة',
+        'deducted_side' => 'مخصوم من العملية',
     ],
 
     'loss' => [
@@ -155,16 +153,19 @@ return [
 
     'profit_methods' => [
         'rate_difference' => 'فرق السعر',
+        'per_unit' => 'وحدات عملة لكل وحدة مسلَّمة',
+        'percentage' => 'نسبة مئوية من القيمة',
         'fixed_amount' => 'مبلغ ثابت',
-        'percentage' => 'فارق',
         'manual' => 'يدوي',
         'none' => 'بدون ربح',
     ],
 
-    'spread_types' => [
-        'per_unit' => 'وحدات عملة لكل وحدة مسلَّمة',
-        'percentage' => 'نسبة مئوية من القيمة',
+    'profit_values' => [
+        'rate_difference' => 'القيمة',
+        'per_unit' => 'الهامش لكل وحدة مسلَّمة',
+        'percentage' => 'النسبة المئوية من القيمة',
+        'fixed_amount' => 'مبلغ الربح',
+        'manual' => 'مبلغ الربح',
+        'none' => 'القيمة',
     ],
-
-    'spread_warning' => 'حدّد المقصود: 0.02 كوحدات لكل وحدة تختلف كثيرًا عن 0.02 بالمئة.',
 ];

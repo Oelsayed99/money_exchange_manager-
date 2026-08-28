@@ -28,7 +28,7 @@ use App\Models\Transaction;
  * profit entry is made, `fx_position` in the received currency holds exactly the cost
  * value, and `fx_position` in the delivered currency holds the delivered amount. Valued
  * at the cost rate those are the same number, so the pair nets to zero. A non-zero
- * residual across all deals means an unrecognised or mis-stated spread — a standing
+ * residual across all deals means an unrecognised or mis-stated margin — a standing
  * correctness check rather than plumbing.
  */
 final class ExchangeService
@@ -209,8 +209,7 @@ final class ExchangeService
             'profit_currency_id' => $input->profitCurrency()->id,
             'customer_rate' => $breakdown->customerRate,
             'cost_rate' => $breakdown->costRate,
-            'spread_type' => $input->spreadType,
-            'spread_value' => $input->spreadValue,
+            'profit_value' => $input->profitValue,
             'customer_value' => $breakdown->customerValue->toStorageString(),
             'cost_value' => $breakdown->costValue->toStorageString(),
             'gross_profit' => $breakdown->grossProfit->toStorageString(),

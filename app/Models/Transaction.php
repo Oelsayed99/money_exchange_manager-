@@ -8,7 +8,6 @@ use App\Domain\Audit\Auditable;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
 use App\Enums\ProfitStatus;
-use App\Enums\SpreadType;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
 use Illuminate\Database\Eloquent\Model;
@@ -35,7 +34,6 @@ use Illuminate\Support\Carbon;
  * @property int|null $profit_currency_id
  * @property string|null $customer_rate
  * @property string|null $cost_rate
- * @property SpreadType|null $spread_type
  * @property string|null $gross_profit
  * @property string|null $net_profit
  * @property string|null $reference
@@ -65,8 +63,7 @@ final class Transaction extends Model
         'profit_currency_id',
         'customer_rate',
         'cost_rate',
-        'spread_type',
-        'spread_value',
+        'profit_value',
         'customer_value',
         'cost_value',
         'gross_profit',
@@ -90,7 +87,6 @@ final class Transaction extends Model
             'method' => MovementMethod::class,
             'profit_method' => ProfitMethod::class,
             'profit_status' => ProfitStatus::class,
-            'spread_type' => SpreadType::class,
             'draft_payload' => 'array',
             'occurred_at' => 'datetime',
             'posted_at' => 'datetime',

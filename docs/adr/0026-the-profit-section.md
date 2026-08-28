@@ -6,27 +6,45 @@
 
 Four changes to the profit half of the exchange screen, asked for by the owner.
 
-## Decision 1 — One way to state a flat margin, not two
+## Decision 1 — There is no spread
 
-`SpreadType::FixedAmount` — "A flat amount for the deal" — computed
-`customer value − the figure typed`. So does `ProfitMethod::FixedAmount`. Character for
-character the same arithmetic, reached through two different lists, and the operator
-picking between "Fixed amount" and "A flat amount for the deal" was choosing nothing.
+The first version of this ADR removed one of the three spread types, because
+`SpreadType::FixedAmount` computed `customer value − the figure typed`, which is
+character for character what `ProfitMethod::FixedAmount` computes. The owner's reply was
+that the other two should come out of the spread as well, and they were right: once the
+duplicate was gone, "Spread" was a profit method whose only content was a second
+question, and the two answers to that question were the only thing that changed the
+arithmetic. **A question whose answer is a method is a method.**
 
-Removed. The two spread types left are the ones Section 3 exists to keep apart: 0.02 as
-units of margin per unit exchanged against 0.02 per cent, which on a 50,000 deal differ
-by a factor of about fifty.
+So `SpreadType` is deleted and `ProfitMethod` has the list in full:
 
-The `spread_type` CHECK constraint is narrowed by migration. It **refuses to run** if
-any transaction was recorded under the removed value rather than restating it: what an
-operator chose is a fact about the deal, and quietly rewriting it as a different profit
-method would change what the ledger claims happened. Nothing in this database used it.
+| | |
+|---|---|
+| Rate difference | customer rate against a cost rate |
+| Currency units per unit delivered | 0.02 on a rate of 3.67 means the currency cost 3.65 |
+| A percentage of the value | 0.02 means two hundredths of a per cent |
+| Fixed amount | a standing agreed margin |
+| Entered by hand | negotiated for this deal |
+| No profit | our own money, moved |
 
-That migration exposed a second problem. The original migration built its constraints
-from `SpreadType::values()` — it asked the application what it believed *today* — so a
-fresh install would have got a two-value constraint while every existing install had
-three. The lists are now written out literally in that migration. A migration describes
-the schema at the moment it ran.
+The two middle entries are Section 3's warning made structural. It says "do not assume
+that 0.02 always means 2%", and the old shape complied by printing that sentence next
+to a select. It is now impossible to state a margin without having said which reading
+it is, because the reading is the thing you picked.
+
+`spread_type` is dropped and `spread_value` becomes `profit_value` — it never only held
+a spread anyway; a fixed amount and a hand-entered figure went in the same column.
+
+Both migrations **refuse to run** rather than reinterpret a recorded deal. Dropping
+`spread_type` from a row that has one throws the meaning away, leaving a transaction
+that says "percentage" without saying whether the figure beside it was a percentage.
+Nothing guesses. Nothing in this database had one.
+
+The first of them exposed a separate problem: the original migration built its CHECK
+constraints from `SpreadType::values()` — it asked the application what it believed
+*today* — so a fresh install would have got a narrowed constraint while every existing
+install had the old one. Those lists are literal now. A migration describes the schema
+at the moment it ran.
 
 ## Decision 2 — The cost rate is stated like a rate
 
@@ -65,24 +83,32 @@ change.
 Until then, the working advice is the one ADR 0023 arrived at: **set the deal up as a
 sale of the currency leaving the till.**
 
-## Decision 3 — Two halves, not eleven rows
+## Decision 3 — Profit, and what comes off it
 
 The calculation was one column: customer rate, cost rate, customer value, cost value,
 gross, fees, expenses, commissions, net. The figure the operator is looking for was
 ninth.
 
-Now two panels — what it cost, what it made — side by side while the column is full
-width and stacked once it becomes the narrow rail, where two columns would put three
-digits on a line.
+The first attempt split it into *cost* and *profit*, which the owner corrected: the two
+cards are **profit** and **what is taken off the deal** — expenses and commissions paid.
+That is the better line. Cost value is not money leaving your pocket, it is the other
+half of the margin calculation, and putting it in a card of its own separated it from
+the subtraction it belongs to. Expenses and commissions genuinely are money gone.
+
+So the profit card carries the whole working — both rates, both values, gross, fees, net
+— and the second card carries the two deductions. Side by side while the column is full
+width, stacked once it becomes the narrow rail where two columns would put three digits
+on a line.
 
 ## Decision 4 — Colour is the last thing that says it
 
-Red on the cost, green on the profit, red on both when the deal loses money.
+Green on the profit, red on the deductions, and the profit card turns red too when the
+deal loses money.
 
 The colour is decoration. Each panel is named, each carries an icon, and the profit
-panel **renames itself** to "What you lost" — Section 13 forbids saying anything with
-colour alone, and a red border is not something a screen reader can read out. The e2e
-test asserts the rename, not the colour, for the same reason.
+panel **renames itself** from "Profit" to "Loss" — Section 13 forbids saying anything
+with colour alone, and a red border is not something a screen reader can read out. The
+e2e test asserts the rename, not the colour, for the same reason.
 
 Each panel is a named landmark (`aria-labelledby` on the heading it already shows,
 rather than an `aria-label` repeating the same words), so the two halves are reachable

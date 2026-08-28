@@ -23,8 +23,7 @@ interface Props {
     currencies: { id: number; code: string; decimal_places: number }[];
     accounts: { id: number; name: string }[];
     counterparties: { id: number; name: string }[];
-    profitMethods: (Option & { needsCostRate: boolean; isStatedDirectly: boolean })[];
-    spreadTypes: Option[];
+    profitMethods: (Option & { needsCostRate: boolean; needsValue: boolean; valueLabel: string })[];
     methods: Option[];
 }
 
@@ -61,8 +60,7 @@ type ExchangeForm = {
     delivered_from_id: string;
     profit_method: string;
     cost_rate: string;
-    spread_type: string;
-    spread_value: string;
+    profit_value: string;
     fees_charged: string;
     expenses: string;
     commissions: string;
@@ -89,7 +87,7 @@ type AmountSlot = 'base_amount' | 'quote_amount';
 const selectClass =
     'border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';
 
-export default function ExchangeCreate({ currencies, accounts, counterparties, profitMethods, spreadTypes, methods }: Props) {
+export default function ExchangeCreate({ currencies, accounts, counterparties, profitMethods, methods }: Props) {
     const { t } = useTranslations();
 
     const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
@@ -114,8 +112,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
         delivered_from_id: String(accounts[0]?.id ?? ''),
         profit_method: 'rate_difference',
         cost_rate: '',
-        spread_type: '',
-        spread_value: '',
+        profit_value: '',
         fees_charged: '',
         expenses: '',
         commissions: '',
@@ -589,36 +586,17 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                 </div>
                             )}
 
-                            {/* Section 3: a spread is never a bare number. What it means is
-                                always chosen alongside it, because 0.02 as units per unit
-                                and 0.02 per cent are wildly different margins. */}
-                            {data.profit_method === 'percentage' && (
+                            {/* One box, named by the method above it.
+                                Section 3's warning — that 0.02 may be two hundredths of a
+                                unit or two per cent — used to be printed here beside a
+                                second select asking which. The two answers are now two
+                                methods, so the label says which reading applies instead of
+                                asking the operator to say it twice. */}
+                            {selectedMethod?.needsValue && (
                                 <div className="grid gap-2">
-                                    <Label htmlFor="spread_type">{t('transactions.exchange.spread_type')}</Label>
-                                    <select
-                                        id="spread_type"
-                                        value={data.spread_type}
-                                        onChange={(e) => setData('spread_type', e.target.value)}
-                                        className={selectClass}
-                                        required
-                                    >
-                                        <option value="">—</option>
-                                        {spreadTypes.map((s) => (
-                                            <option key={s.value} value={s.value}>
-                                                {s.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400">{t('transactions.spread_warning')}</p>
-                                    <InputError message={errors.spread_type} />
-                                </div>
-                            )}
-
-                            {(data.profit_method === 'percentage' || selectedMethod?.isStatedDirectly) && (
-                                <div className="grid gap-2">
-                                    <Label htmlFor="spread_value">{t('transactions.exchange.spread_value')}</Label>
-                                    <MoneyInput id="spread_value" value={data.spread_value} onChange={(v) => setData('spread_value', v)} />
-                                    <InputError message={errors.spread_value} />
+                                    <Label htmlFor="profit_value">{selectedMethod.valueLabel}</Label>
+                                    <MoneyInput id="profit_value" value={data.profit_value} onChange={(v) => setData('profit_value', v)} />
+                                    <InputError message={errors.profit_value} />
                                 </div>
                             )}
 
@@ -702,39 +680,14 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                             </p>
                         ) : (
                             /*
-                                Two halves rather than one column of eleven rows. What
-                                the deal cost and what it made are different questions,
-                                and the figure the operator is actually looking for —
-                                the margin — was the ninth line of a list.
+                                Two cards: what the deal earned, and what came off it.
+                                It was one column of eleven rows with the margin ninth.
 
                                 Side by side while the aside is full width; stacked once
                                 it becomes the narrow rail, where two columns would put
                                 three digits on a line.
                             */
                             <div className={'grid gap-3 sm:grid-cols-2 lg:grid-cols-1 ' + (previewing ? 'opacity-60' : '')}>
-                                <Panel
-                                    tone="cost"
-                                    icon={<ArrowDownRight className="size-4 shrink-0" aria-hidden="true" />}
-                                    title={t('transactions.preview.cost_side')}
-                                >
-                                    {breakdown.cost_rate && (
-                                        <Row label={t('transactions.preview.cost_rate')}>
-                                            <span className="font-mono tabular-nums" dir="ltr">
-                                                {breakdown.cost_rate}
-                                            </span>
-                                        </Row>
-                                    )}
-                                    <Row label={t('transactions.preview.cost_value')}>
-                                        <MoneyDisplay {...toMoney(breakdown.cost_value)} />
-                                    </Row>
-                                    <Row label={t('transactions.preview.expenses')}>
-                                        <MoneyDisplay {...toMoney(breakdown.expenses)} />
-                                    </Row>
-                                    <Row label={t('transactions.preview.commissions')}>
-                                        <MoneyDisplay {...toMoney(breakdown.commissions)} />
-                                    </Row>
-                                </Panel>
-
                                 {/*
                                     Green until the deal loses money, then red. The
                                     heading changes with it — Section 13 forbids saying
@@ -742,7 +695,7 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                     something a screen reader can read out.
                                 */}
                                 <Panel
-                                    tone={breakdown.is_loss ? 'cost' : 'profit'}
+                                    tone={breakdown.is_loss ? 'loss' : 'profit'}
                                     icon={
                                         breakdown.is_loss ? (
                                             <TrendingDown className="size-4 shrink-0" aria-hidden="true" />
@@ -757,8 +710,18 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                                             {breakdown.customer_rate}
                                         </span>
                                     </Row>
+                                    {breakdown.cost_rate && (
+                                        <Row label={t('transactions.preview.cost_rate')}>
+                                            <span className="font-mono tabular-nums" dir="ltr">
+                                                {breakdown.cost_rate}
+                                            </span>
+                                        </Row>
+                                    )}
                                     <Row label={t('transactions.preview.customer_value')}>
                                         <MoneyDisplay {...toMoney(breakdown.customer_value)} />
+                                    </Row>
+                                    <Row label={t('transactions.preview.cost_value')}>
+                                        <MoneyDisplay {...toMoney(breakdown.cost_value)} />
                                     </Row>
                                     <Row label={t('transactions.preview.gross_profit')}>
                                         <MoneyDisplay {...toMoney(breakdown.gross_profit)} signed />
@@ -771,6 +734,22 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
                                     <Row label={<span className="font-medium">{t('transactions.preview.net_profit')}</span>}>
                                         <MoneyDisplay {...toMoney(breakdown.net_profit)} signed className="font-medium" />
+                                    </Row>
+                                </Panel>
+
+                                {/* What comes off the deal. Both figures are already
+                                    inside the net profit above; this card is where they
+                                    went, which the single column buried among the rates. */}
+                                <Panel
+                                    tone="loss"
+                                    icon={<ArrowDownRight className="size-4 shrink-0" aria-hidden="true" />}
+                                    title={t('transactions.preview.deducted_side')}
+                                >
+                                    <Row label={t('transactions.preview.expenses')}>
+                                        <MoneyDisplay {...toMoney(breakdown.expenses)} />
+                                    </Row>
+                                    <Row label={t('transactions.preview.commissions')}>
+                                        <MoneyDisplay {...toMoney(breakdown.commissions)} />
                                     </Row>
                                 </Panel>
                             </div>
@@ -905,13 +884,13 @@ function toMoney(payload: MoneyPayload) {
  * this is: the icon and the heading say it first, and both survive a monochrome
  * screen, a colour-blind reader and a screen reader. Section 13.
  */
-function Panel({ tone, icon, title, children }: { tone: 'cost' | 'profit'; icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function Panel({ tone, icon, title, children }: { tone: 'loss' | 'profit'; icon: React.ReactNode; title: string; children: React.ReactNode }) {
     // A <section> is only a landmark once it has a name, and naming it from the heading
     // it already shows beats an aria-label repeating the same words.
     const headingId = useId();
 
     const tones = {
-        cost: 'border-red-600/40 bg-red-600/5 text-red-800 dark:border-red-500/40 dark:text-red-300',
+        loss: 'border-red-600/40 bg-red-600/5 text-red-800 dark:border-red-500/40 dark:text-red-300',
         profit: 'border-green-600/40 bg-green-600/5 text-green-800 dark:border-green-500/40 dark:text-green-300',
     } as const;
 

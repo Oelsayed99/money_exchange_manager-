@@ -8,7 +8,6 @@ use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
-use App\Enums\SpreadType;
 use App\Models\Account;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -36,8 +35,8 @@ final readonly class ExchangeInput
         public ProfitMethod $profitMethod = ProfitMethod::RateDifference,
         /** Received per unit delivered, at what the delivered currency cost us. */
         public ?string $costRate = null,
-        public ?SpreadType $spreadType = null,
-        public ?string $spreadValue = null,
+        /** The figure typed beside the method: a margin, a percentage or an amount. */
+        public ?string $profitValue = null,
         public ?Money $feesCharged = null,
         public ?Money $expenses = null,
         public ?Money $commissions = null,

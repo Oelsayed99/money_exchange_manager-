@@ -7,7 +7,6 @@ use App\Domain\Exchange\ProfitCalculator;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Enums\ProfitMethod;
-use App\Enums\SpreadType;
 use App\Models\Account;
 use App\Models\Currency;
 use Database\Seeders\CurrencySeeder;
@@ -41,8 +40,7 @@ function exchange(array $overrides = []): ExchangeInput
         occurredAt: now(),
         profitMethod: $overrides['profitMethod'] ?? ProfitMethod::RateDifference,
         costRate: array_key_exists('costRate', $overrides) ? $overrides['costRate'] : '3.65',
-        spreadType: $overrides['spreadType'] ?? null,
-        spreadValue: $overrides['spreadValue'] ?? null,
+        profitValue: $overrides['profitValue'] ?? null,
         feesCharged: $overrides['feesCharged'] ?? null,
         expenses: $overrides['expenses'] ?? null,
         commissions: $overrides['commissions'] ?? null,
@@ -113,12 +111,15 @@ describe('the real statement', function (): void {
 });
 
 // Section 3: "Do not assume that 0.02 always means 2%."
+//
+// The two readings used to be one profit method and a second question about what its
+// number meant. They are two methods now, which is what the ambiguity always was: not
+// two spellings of one thing, but two different calculations.
 describe('the 0.02 ambiguity', function (): void {
     it('reads 0.02 per unit as two hundredths of a unit', function (): void {
         $breakdown = $this->calculator->calculate(exchange([
-            'profitMethod' => ProfitMethod::Percentage,
-            'spreadType' => SpreadType::PerUnit,
-            'spreadValue' => '0.02',
+            'profitMethod' => ProfitMethod::PerUnit,
+            'profitValue' => '0.02',
         ]));
 
         // Cost rate 3.67 − 0.02 = 3.65, so cost is 3,650 and profit is 20.
@@ -129,45 +130,42 @@ describe('the 0.02 ambiguity', function (): void {
     it('reads 0.02 per cent as two hundredths of a per cent', function (): void {
         $breakdown = $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::Percentage,
-            'spreadType' => SpreadType::Percentage,
-            'spreadValue' => '0.02',
+            'profitValue' => '0.02',
         ]));
 
         // 0.02% of 3,670 is 0.734.
         expect($breakdown->grossProfit->toDisplayString())->toBe('0.734');
     });
 
-    // The whole reason the enum exists: the same number, two readings, wildly
+    // The whole reason the two are separate: the same number, two readings, wildly
     // different answers. On a large deal this is the difference between a real margin
     // and a rounding error.
     it('gives materially different answers for the same number', function (): void {
         $perUnit = $this->calculator->calculate(exchange([
-            'profitMethod' => ProfitMethod::Percentage,
-            'spreadType' => SpreadType::PerUnit,
-            'spreadValue' => '0.02',
+            'profitMethod' => ProfitMethod::PerUnit,
+            'profitValue' => '0.02',
         ]));
 
         $percentage = $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::Percentage,
-            'spreadType' => SpreadType::Percentage,
-            'spreadValue' => '0.02',
+            'profitValue' => '0.02',
         ]));
 
         expect($perUnit->grossProfit->equals($percentage->grossProfit))->toBeFalse();
     });
 
-    it('refuses a spread with no stated meaning', function (): void {
+    // There is no longer a way to pick a reading and leave the figure out, or a figure
+    // with no reading: choosing the method is choosing both.
+    it('refuses a margin with no figure', function (): void {
         expect(fn () => $this->calculator->calculate(exchange([
-            'profitMethod' => ProfitMethod::Percentage,
-            'spreadValue' => '0.02',
-        ])))->toThrow(DomainException::class, 'what that value means');
+            'profitMethod' => ProfitMethod::PerUnit,
+        ])))->toThrow(DomainException::class, 'needs its figure stated');
     });
 
     it('reads 2 per cent as two per cent', function (): void {
         $breakdown = $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::Percentage,
-            'spreadType' => SpreadType::Percentage,
-            'spreadValue' => '2',
+            'profitValue' => '2',
         ]));
 
         expect($breakdown->grossProfit->toDisplayString())->toBe('73.40');
@@ -178,7 +176,7 @@ describe('the other profit methods', function (): void {
     it('takes a fixed amount as stated', function (): void {
         $breakdown = $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::FixedAmount,
-            'spreadValue' => '25',
+            'profitValue' => '25',
         ]));
 
         expect($breakdown->grossProfit->toDisplayString())->toBe('25.00')
@@ -189,7 +187,7 @@ describe('the other profit methods', function (): void {
     it('takes a manually entered profit as stated', function (): void {
         $breakdown = $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::Manual,
-            'spreadValue' => '17.5',
+            'profitValue' => '17.5',
         ]));
 
         expect($breakdown->grossProfit->toDisplayString())->toBe('17.50');
@@ -213,7 +211,7 @@ describe('the other profit methods', function (): void {
     it('refuses a fixed-amount deal with no amount', function (): void {
         expect(fn () => $this->calculator->calculate(exchange([
             'profitMethod' => ProfitMethod::FixedAmount,
-        ])))->toThrow(DomainException::class, 'profit amount to be stated');
+        ])))->toThrow(DomainException::class, 'needs its figure stated');
     });
 });
 

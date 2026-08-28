@@ -22,8 +22,6 @@ return [
         'cost_rate_hint' => 'What the delivered currency actually cost you. The units are written beside the box — check them against what you charged.',
         'cost_rate_flipped' => 'Careful: the rate above is quoted 1 :dealBase = … :dealQuote. This box is the other way round, per unit delivered.',
         'customer_rate_inline' => 'Charged',
-        'spread_type' => 'The spread value means',
-        'spread_value' => 'Spread',
         'fees' => 'Fees charged',
         'expenses' => 'Expenses',
         'commissions' => 'Commissions paid',
@@ -66,9 +64,9 @@ return [
         'net_profit' => 'Net profit',
         'awaiting' => 'Fill in both amounts to see the calculation.',
         'per_unit' => 'per unit delivered',
-        'cost_side' => 'What it cost',
-        'profit_side' => 'What you made',
-        'loss_side' => 'What you lost',
+        'profit_side' => 'Profit',
+        'loss_side' => 'Loss',
+        'deducted_side' => 'Taken off the deal',
     ],
 
     'loss' => [
@@ -156,16 +154,21 @@ return [
 
     'profit_methods' => [
         'rate_difference' => 'Rate difference',
+        'per_unit' => 'Currency units per unit delivered',
+        'percentage' => 'A percentage of the value',
         'fixed_amount' => 'Fixed amount',
-        'percentage' => 'Spread',
         'manual' => 'Entered by hand',
         'none' => 'No profit',
     ],
 
-    'spread_types' => [
-        'per_unit' => 'Currency units per unit delivered',
-        'percentage' => 'A percentage of the value',
+    // What the figure beside the method is. Section 3: 0.02 is not always 2%, so the
+    // box never says only "value" — it says what this method will read it as.
+    'profit_values' => [
+        'rate_difference' => 'Value',
+        'per_unit' => 'Margin per unit delivered',
+        'percentage' => 'Percentage of the value',
+        'fixed_amount' => 'Profit amount',
+        'manual' => 'Profit amount',
+        'none' => 'Value',
     ],
-
-    'spread_warning' => 'Say which you mean: 0.02 as units per unit is a very different margin from 0.02 per cent.',
 ];

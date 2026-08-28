@@ -8,7 +8,6 @@ use App\Domain\Money\Decimal;
 use App\Domain\Money\Exceptions\PrecisionLoss;
 use App\Domain\Money\Money;
 use App\Enums\ProfitMethod;
-use App\Enums\SpreadType;
 use DomainException;
 
 /**
@@ -80,9 +79,14 @@ final class ProfitCalculator
             // currency actually cost.
             ProfitMethod::RateDifference => $this->fromCostRate($input, $customerRate),
 
-            // A margin expressed against the rate. The spread type is what stops 0.02
-            // being read as 2% when it means two hundredths of a unit.
-            ProfitMethod::Percentage => $this->fromSpread($input, $customerRate, $customerValue),
+            // Section 3's two readings of the same number, each now its own method.
+            // 0.02 per unit on a rate of 3.67 is a cost of 3.65; 0.02 per cent of the
+            // same deal is two hundredths of a per cent. A factor of about fifty.
+            ProfitMethod::PerUnit => $this->fromPerUnitMargin($input, $customerRate),
+            ProfitMethod::Percentage => [
+                null,
+                $customerValue->minus($this->percentageOf($customerValue, $this->statedValue($input))),
+            ],
 
             // The operator states the profit; the cost is whatever is left.
             ProfitMethod::FixedAmount, ProfitMethod::Manual => [
@@ -119,56 +123,51 @@ final class ProfitCalculator
     }
 
     /**
-     * A margin expressed as a spread against the customer rate.
+     * Margin stated as currency units per unit exchanged.
+     *
+     * The cost rate is the customer rate less the margin, so this is the one stated
+     * method that still produces a rate — and the rate is what the ledger records.
      *
      * @param  numeric-string  $customerRate
-     * @return array{string|null, Money}
+     * @return array{string, Money}
      */
-    private function fromSpread(ExchangeInput $input, string $customerRate, Money $customerValue): array
+    private function fromPerUnitMargin(ExchangeInput $input, string $customerRate): array
     {
-        $type = $input->spreadType;
-        $value = $input->spreadValue;
+        $derived = Decimal::truncateTo(
+            bcsub($customerRate, $this->statedValue($input), Decimal::WORKING_SCALE),
+            self::RATE_SCALE,
+        );
 
-        if ($type === null || $value === null) {
+        return [$derived, $this->convert($input->deliveredAmount, $derived, $input)];
+    }
+
+    /**
+     * The figure typed alongside the method.
+     *
+     * Narrowed for the arithmetic below, and rejected here rather than at bcmath if it
+     * is not a plain decimal.
+     *
+     * @return numeric-string
+     */
+    private function statedValue(ExchangeInput $input): string
+    {
+        $value = $input->profitValue;
+
+        if ($value === null) {
             throw new DomainException(
-                'A spread deal needs both a value and what that value means. Section 3: 0.02 may be '
-                .'two hundredths of a unit or it may be two per cent, and the difference on a large '
-                .'deal is enormous.'
+                "A {$input->profitMethod->value} deal needs its figure stated. "
+                .'Supply one, or choose a method that does not need it.'
             );
         }
 
-        // Narrows the value for the arithmetic below, and rejects anything that is not
-        // a plain decimal before it can reach bcmath.
         Decimal::assertValid($value);
 
-        return match ($type) {
-            // Margin per unit exchanged: cost rate is the customer rate less the spread.
-            SpreadType::PerUnit => [
-                $derived = Decimal::truncateTo(bcsub($customerRate, $value, Decimal::WORKING_SCALE), self::RATE_SCALE),
-                $this->convert($input->deliveredAmount, $derived, $input),
-            ],
-
-            // A percentage of what the customer paid.
-            SpreadType::Percentage => [
-                null,
-                $customerValue->minus($this->percentageOf($customerValue, $value)),
-            ],
-        };
+        return $value;
     }
 
     private function statedProfit(ExchangeInput $input): Money
     {
-        $value = $input->spreadValue;
-
-        if ($value === null) {
-            throw new DomainException(
-                "A {$input->profitMethod->value} deal needs the profit amount to be stated."
-            );
-        }
-
-        Decimal::assertValid($value);
-
-        return Money::of($value, $input->profitCurrency()->spec());
+        return Money::of($this->statedValue($input), $input->profitCurrency()->spec());
     }
 
     /** @param  numeric-string  $percentage */

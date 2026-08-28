@@ -9,7 +9,6 @@ use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
-use App\Enums\SpreadType;
 use App\Models\Account;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -49,8 +48,7 @@ final class ExchangeRequest extends FormRequest
 
             'profit_method' => ['required', Rule::enum(ProfitMethod::class)],
             'cost_rate' => ['nullable', 'string'],
-            'spread_type' => ['nullable', Rule::enum(SpreadType::class)],
-            'spread_value' => ['nullable', 'string'],
+            'profit_value' => ['nullable', 'string'],
 
             'fees_charged' => ['nullable', 'string'],
             'expenses' => ['nullable', 'string'],
@@ -72,7 +70,7 @@ final class ExchangeRequest extends FormRequest
     protected function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            foreach (['received_amount', 'delivered_amount', 'cost_rate', 'spread_value', 'fees_charged', 'expenses', 'commissions'] as $field) {
+            foreach (['received_amount', 'delivered_amount', 'cost_rate', 'profit_value', 'fees_charged', 'expenses', 'commissions'] as $field) {
                 $value = $this->input($field);
 
                 if ($value === null || $value === '') {
@@ -86,7 +84,7 @@ final class ExchangeRequest extends FormRequest
                 }
 
                 // Rates carry more precision than amounts, so they are allowed more.
-                $limit = in_array($field, ['cost_rate', 'spread_value'], true) ? 12 : Money::SCALE;
+                $limit = in_array($field, ['cost_rate', 'profit_value'], true) ? 12 : Money::SCALE;
 
                 if (Decimal::scaleOf($value) > $limit) {
                     $validator->errors()->add($field, __('validation.max.numeric', [
@@ -100,7 +98,7 @@ final class ExchangeRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['cost_rate', 'spread_value', 'fees_charged', 'expenses', 'commissions', 'counterparty_id', 'method', 'spread_type'] as $field) {
+        foreach (['cost_rate', 'profit_value', 'fees_charged', 'expenses', 'commissions', 'counterparty_id', 'method'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
             }
@@ -134,10 +132,7 @@ final class ExchangeRequest extends FormRequest
             occurredAt: new \DateTimeImmutable((string) $this->validated('occurred_at')),
             profitMethod: ProfitMethod::from((string) $this->validated('profit_method')),
             costRate: $this->validated('cost_rate'),
-            spreadType: $this->validated('spread_type') !== null
-                ? SpreadType::from((string) $this->validated('spread_type'))
-                : null,
-            spreadValue: $this->validated('spread_value'),
+            profitValue: $this->validated('profit_value'),
             feesCharged: $money('fees_charged', $received),
             expenses: $money('expenses', $received),
             commissions: $money('commissions', $received),

@@ -36,8 +36,16 @@ const props = {
     ],
     accounts: [{ id: 10, name: 'Main safe' }],
     counterparties: [],
-    profitMethods: [{ value: 'rate_difference', label: 'Rate difference', needsCostRate: true, isStatedDirectly: false }],
-    spreadTypes: [],
+    profitMethods: [
+        { value: 'rate_difference', label: 'Rate difference', needsCostRate: true, needsValue: false, valueLabel: 'Value' },
+        {
+            value: 'per_unit',
+            label: 'Currency units per unit delivered',
+            needsCostRate: false,
+            needsValue: true,
+            valueLabel: 'Margin per unit delivered',
+        },
+    ],
     methods: [],
 };
 
