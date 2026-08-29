@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $currency_id
  * @property BalanceBucket $bucket
  * @property Money|null $amount
+ * @property Money|null $posted_amount how much of it has reached the ledger
  */
 final class CounterpartyOpeningBalance extends Model
 {
@@ -28,6 +29,7 @@ final class CounterpartyOpeningBalance extends Model
         'currency_id',
         'bucket',
         'amount',
+        'posted_amount',
     ];
 
     /** @return array<string, string> */
@@ -36,6 +38,7 @@ final class CounterpartyOpeningBalance extends Model
         return [
             'bucket' => BalanceBucket::class,
             'amount' => MoneyCast::class.':currency_id',
+            'posted_amount' => MoneyCast::class.':currency_id',
         ];
     }
 

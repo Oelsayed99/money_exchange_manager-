@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
+use App\Domain\Rates\ExchangeRateApi;
+use App\Domain\Rates\RateProvider;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -30,6 +32,10 @@ class AppServiceProvider extends ServiceProvider
          */
         $this->app->singleton(CurrencyRegistry::class);
         $this->app->singleton(LedgerAccountResolver::class);
+
+        // One implementation today; an interface because a business quoting intraday
+        // will want an hourly feed behind a key, and that should be a line here.
+        $this->app->bind(RateProvider::class, ExchangeRateApi::class);
     }
 
     /**

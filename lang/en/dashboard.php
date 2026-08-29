@@ -3,6 +3,11 @@
 declare(strict_types=1);
 
 return [
+    'rates' => [
+        'title' => 'Market reference',
+        'updated' => 'Published :at · reference only, not used in any deal',
+    ],
+
     'title' => 'Dashboard',
     'description' => 'Where everything stands, and what moved.',
 

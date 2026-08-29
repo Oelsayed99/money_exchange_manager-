@@ -61,6 +61,7 @@ return [
     'list_hint' => 'Each column is one side added up. Behind them the ledger keeps four positions apart — :buckets — and never nets one against another. Open a statement to see the split and the movements behind it.',
     'open_statement' => 'Open the statement for :currency',
     'unposted_opening' => 'Opening position not posted',
+    'opening_transaction' => 'Opening position — :bucket',
     'unposted_opening_hint' => 'Declared on this party but never recorded as a transaction, so it is not in the figures here. Open the statement to see it.',
     'no_positions' => 'No opening positions declared.',
     'negative_not_allowed' => 'A negative :bucket is a :mirror. Record it there instead.',

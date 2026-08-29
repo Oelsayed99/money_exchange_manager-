@@ -35,6 +35,15 @@ final readonly class TransactionInput
         public ?Account $destinationAccount = null,
         public ?Counterparty $counterparty = null,
         public ?BalanceBucket $bucket = null,
+        /**
+         * Whether an opening position is being opened or unwound.
+         *
+         * A declared position can be corrected after it has been posted, and the ledger
+         * has no way to un-post: the correction is a second transaction with the two
+         * accounts the other way round. The amount stays positive — this is what says
+         * which direction it went, exactly as the type does everywhere else.
+         */
+        public bool $increasesBucket = true,
         public ?MovementMethod $method = null,
         public ?string $reference = null,
         public ?string $description = null,
@@ -74,6 +83,7 @@ final readonly class TransactionInput
             'destination_account_id' => $this->destinationAccount?->getKey(),
             'counterparty_id' => $this->counterparty?->getKey(),
             'bucket' => $this->bucket?->value,
+            'increases_bucket' => $this->increasesBucket,
             'method' => $this->method?->value,
             'reference' => $this->reference,
             'description' => $this->description,
@@ -104,6 +114,7 @@ final readonly class TransactionInput
                 ? Counterparty::query()->find((int) $payload['counterparty_id'])
                 : null,
             bucket: isset($payload['bucket']) ? BalanceBucket::from((string) $payload['bucket']) : null,
+            increasesBucket: (bool) ($payload['increases_bucket'] ?? true),
             method: isset($payload['method']) ? MovementMethod::from((string) $payload['method']) : null,
             reference: $payload['reference'] ?? null,
             description: $payload['description'] ?? null,

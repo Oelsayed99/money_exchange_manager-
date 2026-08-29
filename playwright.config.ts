@@ -39,7 +39,10 @@ export default defineConfig({
         url: `http://127.0.0.1:${PORT}/login`,
         reuseExistingServer: false,
         timeout: 60_000,
-        env: { DB_DATABASE: DATABASE, APP_ENV: 'local' },
+        // No outbound rate feed. A suite that reaches a third party is a suite that
+        // fails when they have an outage, and the strip has its own tests with a faked
+        // response.
+        env: { DB_DATABASE: DATABASE, APP_ENV: 'local', RATES_ENABLED: 'false' },
     },
 
     projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

@@ -28,6 +28,8 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0027](docs/adr/0027-which-leg-carries-the-margin.md) | Which leg carries the margin — buying, without a reciprocal |
 | [0028](docs/adr/0028-rtl-and-the-back-button.md) | RTL quotations, the back button, and testing the built assets |
 | [0029](docs/adr/0029-two-sides-on-the-counterparty-list.md) | Two sides on the counterparty list, with the buckets a click away |
+| [0030](docs/adr/0030-opening-positions-are-transactions.md) | A position typed on a counterparty is posted, dated and findable |
+| [0031](docs/adr/0031-reference-rates.md) | Market rates on the dashboard, sealed away from the ledger |
 
 ### Money is a decimal string, not integer minor units
 

@@ -96,11 +96,20 @@ final class PostingRules
             $bucket = $input->requireBucket();
             $target = $this->accounts->forBucket($bucket, $input->counterparty, $input->currency);
 
+            // An asset position opens with a debit and a liability with a credit;
+            // correcting one downward is the same pair the other way round.
+            $debitTarget = $bucket->isAsset() === $input->increasesBucket;
+
+            // The statement's own rule for which way value went: growing what we owe
+            // them, or shrinking what they owe us, both mean it came from them. Without
+            // a leg the transaction list would show this row with no amount at all.
+            $fromThem = $bucket->isLiability() === $input->increasesBucket;
+
             return [
-                $bucket->isAsset()
+                $debitTarget
                     ? [EntryDraft::debit($target, $input->amount), EntryDraft::credit($equity, $input->amount)]
                     : [EntryDraft::debit($equity, $input->amount), EntryDraft::credit($target, $input->amount)],
-                [],
+                [$fromThem ? $this->receivedLeg($input) : $this->deliveredLeg($input)],
             ];
         }
 

@@ -190,9 +190,13 @@ export default function CounterpartyFormPage({ counterparty, counterpartyTypes, 
                         <legend className="px-1 text-sm font-medium">{t('counterparties.opening_positions')}</legend>
                         <p className="text-muted-foreground text-xs">{t('counterparties.opening_hint')}</p>
 
+                        {/* A group per currency, named by its code. "Credit held" appears
+                            once for every currency on the page, so without the grouping the
+                            four inputs in each row are indistinguishable to anything that
+                            reads labels rather than looks at the heading above them. */}
                         {availableCurrencies.map((currency) => (
-                            <div key={currency.id} className="grid gap-3">
-                                <div className="font-mono text-sm font-medium">{currency.code}</div>
+                            <fieldset key={currency.id} className="grid gap-3">
+                                <legend className="font-mono text-sm font-medium">{currency.code}</legend>
 
                                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                                     {buckets.map((bucket) => (
@@ -216,7 +220,7 @@ export default function CounterpartyFormPage({ counterparty, counterpartyTypes, 
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                            </fieldset>
                         ))}
                     </fieldset>
 

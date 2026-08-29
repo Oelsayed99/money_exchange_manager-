@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Counterparty\OpeningPositionRecorder;
 use App\Domain\Money\Money;
 use App\Domain\Reporting\CounterpartyStanding;
 use App\Domain\Reporting\CounterpartyStandings;
@@ -33,7 +34,10 @@ use Inertia\Response;
  */
 final class CounterpartyController extends Controller
 {
-    public function __construct(private readonly CounterpartyStandings $standings) {}
+    public function __construct(
+        private readonly CounterpartyStandings $standings,
+        private readonly OpeningPositionRecorder $openings,
+    ) {}
 
     public function index(): Response
     {
@@ -94,7 +98,7 @@ final class CounterpartyController extends Controller
         DB::transaction(function () use ($request): void {
             $party = Counterparty::query()->create($request->safe()->except('positions'));
 
-            $this->syncPositions($party, $request->validated('positions', []));
+            $this->openings->sync($party, $request->validated('positions', []), now());
         });
 
         return to_route('counterparties.index')->with('success', __('counterparties.created'));
@@ -117,32 +121,10 @@ final class CounterpartyController extends Controller
         DB::transaction(function () use ($request, $counterparty): void {
             $counterparty->update($request->safe()->except('positions'));
 
-            $this->syncPositions($counterparty, $request->validated('positions', []));
+            $this->openings->sync($counterparty, $request->validated('positions', []), now());
         });
 
         return to_route('counterparties.index')->with('success', __('counterparties.updated'));
-    }
-
-    /**
-     * @param  array<int, array{bucket: string, currency_id: int|string, amount: string}>  $rows
-     */
-    private function syncPositions(Counterparty $party, array $rows): void
-    {
-        $keep = [];
-
-        foreach ($rows as $row) {
-            $position = $party->openingBalances()->updateOrCreate(
-                ['bucket' => $row['bucket'], 'currency_id' => (int) $row['currency_id']],
-                ['amount' => $row['amount']],
-            );
-
-            $keep[] = $position->getKey();
-        }
-
-        // Rows removed from the form are removed from the record. These are declared
-        // opening positions, not ledger entries — the ledger's own immutability rules
-        // arrive in Phase 3 and will govern anything posted from them.
-        $party->openingBalances()->whereNotIn('id', $keep === [] ? [0] : $keep)->delete();
     }
 
     /** @return array<string, mixed> */
@@ -202,6 +184,11 @@ final class CounterpartyController extends Controller
                     'code' => $position->currency?->code,
                     // String, never a JSON number (R1).
                     'amount' => $position->amount?->toDisplayString() ?? '0',
+                    // What the ledger has not been told about yet. Zero for anything
+                    // saved since opening positions started posting.
+                    'unposted' => $position->amount
+                        ?->minus($position->posted_amount ?? $position->amount)
+                        ->toDisplayString() ?? '0',
                 ])
                 ->values()
                 ->all(),

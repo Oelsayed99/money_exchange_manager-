@@ -45,8 +45,16 @@ interface Filters {
     to: string | null;
 }
 
+/** What the market is quoting. Reading only — see ReferenceRates. */
+interface Rates {
+    base: string;
+    updated_at: string;
+    quotes: { code: string; rate: string }[];
+}
+
 interface Props {
     dashboard: DashboardData;
+    rates: Rates | null;
     filters: Filters;
     options: {
         counterparties: { id: number; name: string }[];
@@ -59,7 +67,7 @@ interface Props {
 const selectClass =
     'border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';
 
-export default function Dashboard({ dashboard, filters, options }: Props) {
+export default function Dashboard({ dashboard, rates, filters, options }: Props) {
     const { t } = useTranslations();
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: t('dashboard.title'), href: '/dashboard' }];
@@ -79,6 +87,8 @@ export default function Dashboard({ dashboard, filters, options }: Props) {
                     <h1 className="text-2xl font-semibold tracking-tight">{t('dashboard.title')}</h1>
                     <p className="text-muted-foreground text-sm">{t('dashboard.description')}</p>
                 </div>
+
+                <ReferenceRateStrip rates={rates} />
 
                 {/* Filters live in the URL so a view can be linked to and come back the same. */}
                 <div className="flex flex-wrap items-end gap-3">
@@ -537,6 +547,48 @@ function TopClients({
                 </ResponsiveContainer>
             </div>
         </ChartPanel>
+    );
+}
+
+/**
+ * Where the market is, for the person about to quote a price.
+ *
+ * Deliberately plain and deliberately labelled. These figures never enter a deal: the
+ * rate on an exchange is typed by hand and the ledger records the two amounts that
+ * actually moved, which is why a deal cannot change value after the fact. The strip
+ * says when the feed last published rather than implying it is current, because the
+ * free source publishes once a day and a business quoting intraday needs to know that.
+ *
+ * Absent entirely when the feed is off or unreachable — somebody else's outage is not a
+ * reason to withhold the ledger.
+ */
+function ReferenceRateStrip({ rates }: { rates: Rates | null }) {
+    const { t } = useTranslations();
+
+    if (rates === null) {
+        return null;
+    }
+
+    return (
+        <section
+            aria-label={t('dashboard.rates.title')}
+            className="border-sidebar-border/70 dark:border-sidebar-border flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border px-4 py-3"
+        >
+            <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{t('dashboard.rates.title')}</span>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {rates.quotes.map((quote) => (
+                    <span key={quote.code} className="font-mono text-sm tabular-nums" dir="ltr">
+                        <span className="text-muted-foreground">1 {rates.base} = </span>
+                        {quote.rate} <span className="text-muted-foreground">{quote.code}</span>
+                    </span>
+                ))}
+            </div>
+
+            <span className="text-muted-foreground ms-auto text-xs">
+                {t('dashboard.rates.updated', { at: new Date(rates.updated_at).toLocaleString() })}
+            </span>
+        </section>
     );
 }
 

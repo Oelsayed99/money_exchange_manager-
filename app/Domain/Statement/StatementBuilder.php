@@ -281,6 +281,11 @@ final class StatementBuilder
     /**
      * Opening positions declared on the record but not posted to the ledger.
      *
+     * Since opening positions started posting, this is almost always empty — a figure
+     * typed on a counterparty now writes a transaction, and the transaction is in the
+     * rows above. What is left here is the *unposted* remainder: positions declared
+     * before that, which still owe the ledger an entry.
+     *
      * @return array<string, Money>
      */
     private function declaredOpening(Counterparty $counterparty, Currency $currency): array
@@ -294,10 +299,17 @@ final class StatementBuilder
         $declared = [];
 
         foreach (BalanceBucket::cases() as $bucket) {
-            $amount = $rows->firstWhere('bucket', $bucket)?->amount;
+            $row = $rows->firstWhere('bucket', $bucket);
+            $amount = $row?->amount;
 
-            if ($amount !== null && ! $amount->isZero()) {
-                $declared[$bucket->value] = $amount;
+            if ($amount === null) {
+                continue;
+            }
+
+            $outstanding = $amount->minus($row->posted_amount ?? $currency->zero());
+
+            if (! $outstanding->isZero()) {
+                $declared[$bucket->value] = $outstanding;
             }
         }
 

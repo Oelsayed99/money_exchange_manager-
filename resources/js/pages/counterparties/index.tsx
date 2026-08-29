@@ -14,6 +14,7 @@ interface Position {
     currency_id: number;
     code: string | null;
     amount: string;
+    unposted: string;
 }
 
 /** One currency, two sides. The four buckets travel with it for the drill-down. */
@@ -131,7 +132,7 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                             in the ledger, so it is not in the figures beside
                                             it. Saying nothing would make the row look wrong
                                             to the person who typed it. */}
-                                        {row.positions.length > 0 && (
+                                        {row.positions.some((position) => Number(position.unposted) !== 0) && (
                                             <div
                                                 className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
                                                 title={t('counterparties.unposted_opening_hint')}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Domain\Money\Money;
+use App\Domain\Rates\RateProvider;
 use App\Domain\Reporting\ClientTotal;
 use App\Domain\Reporting\CounterpartyPosition;
 use App\Domain\Reporting\Dashboard;
@@ -29,7 +30,10 @@ use Inertia\Response;
  */
 final class DashboardController extends Controller
 {
-    public function __construct(private readonly DashboardQuery $dashboard) {}
+    public function __construct(
+        private readonly DashboardQuery $dashboard,
+        private readonly RateProvider $rates,
+    ) {}
 
     public function __invoke(Request $request): Response
     {
@@ -55,6 +59,7 @@ final class DashboardController extends Controller
 
         return Inertia::render('dashboard', [
             'dashboard' => $this->present($this->dashboard->run($filters)),
+            'rates' => $this->referenceRates(),
             'filters' => [
                 'counterparty' => $filters->counterparty?->getKey(),
                 'currency' => $filters->currency?->code,
@@ -87,6 +92,35 @@ final class DashboardController extends Controller
                 ),
             ],
         ]);
+    }
+
+    /**
+     * What the market is quoting, for reading only.
+     *
+     * Null when the feed is off or unreachable, and the strip simply does not appear.
+     * Nothing here is a Money and nothing derived from it reaches the ledger — a deal
+     * is still recorded as the two amounts that actually moved.
+     *
+     * @return array{base: string, updated_at: string, quotes: list<array{code: string, rate: string}>}|null
+     */
+    private function referenceRates(): ?array
+    {
+        $rates = $this->rates->latest();
+
+        if ($rates === null) {
+            return null;
+        }
+
+        /** @var list<string> $codes */
+        $codes = Currency::query()->where('is_active', true)->orderBy('sort_order')->pluck('code')->all();
+
+        $quotes = $rates->forCodes($codes);
+
+        return $quotes === [] ? null : [
+            'base' => $rates->base,
+            'updated_at' => $rates->updatedAt->toIso8601String(),
+            'quotes' => $quotes,
+        ];
     }
 
     /** @return array<string, mixed> */
