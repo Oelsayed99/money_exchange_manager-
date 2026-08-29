@@ -7,13 +7,21 @@ import { useTranslations } from '@/lib/i18n';
 import { usePermissions } from '@/lib/permissions';
 import type { BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { FileText, Pencil, Plus } from 'lucide-react';
+import { AlertTriangle, FileText, Pencil, Plus } from 'lucide-react';
 
 interface Position {
     bucket: string;
     currency_id: number;
     code: string | null;
     amount: string;
+}
+
+/** One currency, two sides. The four buckets travel with it for the drill-down. */
+interface Standing {
+    code: string;
+    ours: string;
+    theirs: string;
+    buckets: Record<string, string>;
 }
 
 interface CounterpartyRow {
@@ -25,6 +33,7 @@ interface CounterpartyRow {
     preferred_currency_code: string | null;
     is_active: boolean;
     positions: Position[];
+    standings: Standing[];
 }
 
 interface Bucket {
@@ -40,8 +49,6 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
     const canManage = can('counterparties.manage');
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: t('nav.counterparties'), href: '/counterparties' }];
-
-    const positionsFor = (row: CounterpartyRow, bucket: string) => row.positions.filter((position) => position.bucket === bucket);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -67,31 +74,11 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                 </div>
 
                 <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border">
-                    <table className="w-full min-w-[64rem] border-collapse text-sm">
+                    <table className="w-full min-w-[56rem] border-collapse text-sm">
                         <thead className="bg-muted/50 sticky top-0">
-                            {/* Two header rows: the buckets are grouped by side, so that
-                                "owed to us" and "owed by us" are visibly different things
-                                rather than four columns of undifferentiated numbers. */}
-                            <tr className="text-muted-foreground text-xs">
-                                <th scope="col" className="px-4 pt-3" />
-                                <th scope="col" className="px-4 pt-3" />
-                                <th
-                                    scope="col"
-                                    className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 pt-3 text-center font-medium"
-                                    colSpan={2}
-                                >
-                                    {t('counterparties.assets')}
-                                </th>
-                                <th
-                                    scope="col"
-                                    className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 pt-3 text-center font-medium"
-                                    colSpan={2}
-                                >
-                                    {t('counterparties.liabilities')}
-                                </th>
-                                <th scope="col" className="px-4 pt-3" />
-                                <th scope="col" className="px-4 pt-3" />
-                            </tr>
+                            {/* Two columns, not four. Which side the money is on is the
+                                question a list answers; which bucket it sits in is the
+                                question the statement answers. */}
                             <tr className="text-muted-foreground">
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('counterparties.fields.name')}
@@ -99,19 +86,20 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('counterparties.fields.type')}
                                 </th>
-                                {buckets.map((bucket, index) => (
-                                    <th
-                                        key={bucket.value}
-                                        scope="col"
-                                        title={bucket.hint}
-                                        className={
-                                            'px-4 py-3 text-end font-medium' +
-                                            (index === 0 || index === 2 ? ' border-sidebar-border/70 dark:border-sidebar-border border-s' : '')
-                                        }
-                                    >
-                                        {bucket.label}
-                                    </th>
-                                ))}
+                                <th
+                                    scope="col"
+                                    title={t('counterparties.ours_hint')}
+                                    className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end font-medium"
+                                >
+                                    {t('counterparties.ours_with_them')}
+                                </th>
+                                <th
+                                    scope="col"
+                                    title={t('counterparties.theirs_hint')}
+                                    className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end font-medium"
+                                >
+                                    {t('counterparties.theirs_with_us')}
+                                </th>
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('common.status')}
                                 </th>
@@ -124,7 +112,7 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                         <tbody>
                             {counterparties.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="text-muted-foreground px-4 py-12 text-center">
+                                    <td colSpan={6} className="text-muted-foreground px-4 py-12 text-center">
                                         {t('counterparties.empty')}
                                     </td>
                                 </tr>
@@ -139,38 +127,24 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                                 {row.phone}
                                             </div>
                                         )}
+                                        {/* An opening somebody typed but never posted is not
+                                            in the ledger, so it is not in the figures beside
+                                            it. Saying nothing would make the row look wrong
+                                            to the person who typed it. */}
+                                        {row.positions.length > 0 && (
+                                            <div
+                                                className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400"
+                                                title={t('counterparties.unposted_opening_hint')}
+                                            >
+                                                <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
+                                                {t('counterparties.unposted_opening')}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="text-muted-foreground px-4 py-3">{row.type_label}</td>
 
-                                    {buckets.map((bucket, index) => {
-                                        const positions = positionsFor(row, bucket.value);
-
-                                        return (
-                                            <td
-                                                key={bucket.value}
-                                                className={
-                                                    'px-4 py-3 text-end' +
-                                                    (index === 0 || index === 2
-                                                        ? ' border-sidebar-border/70 dark:border-sidebar-border border-s'
-                                                        : '')
-                                                }
-                                            >
-                                                {positions.length === 0 ? (
-                                                    <span className="text-muted-foreground">{t('counterparties.nothing_declared')}</span>
-                                                ) : (
-                                                    <div className="flex flex-col items-end gap-0.5">
-                                                        {positions.map((position) => (
-                                                            <MoneyDisplay
-                                                                key={`${position.bucket}-${position.currency_id}`}
-                                                                amount={position.amount}
-                                                                currency={position.code ?? ''}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </td>
-                                        );
-                                    })}
+                                    <Side row={row} field="ours" />
+                                    <Side row={row} field="theirs" />
 
                                     <td className="px-4 py-3">
                                         <StatusBadge active={row.is_active} />
@@ -197,8 +171,44 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                     </table>
                 </div>
 
-                <p className="text-muted-foreground max-w-3xl text-xs">{t('counterparties.opening_hint')}</p>
+                <p className="text-muted-foreground max-w-3xl text-xs">
+                    {t('counterparties.list_hint', { buckets: buckets.map((bucket) => bucket.label).join(' · ') })}
+                </p>
             </div>
         </AppLayout>
+    );
+}
+
+/**
+ * One side of one relationship, per currency, each figure a way in.
+ *
+ * The number is a link because it is a summary of something: following it opens the
+ * statement for that currency, which is where the four buckets and the movements behind
+ * them are.
+ */
+function Side({ row, field }: { row: CounterpartyRow; field: 'ours' | 'theirs' }) {
+    const { t } = useTranslations();
+
+    const carrying = row.standings.filter((standing) => standing[field] !== '0' && Number(standing[field]) !== 0);
+
+    return (
+        <td className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end">
+            {carrying.length === 0 ? (
+                <span className="text-muted-foreground">{t('counterparties.nothing_declared')}</span>
+            ) : (
+                <div className="flex flex-col items-end gap-0.5">
+                    {carrying.map((standing) => (
+                        <Link
+                            key={standing.code}
+                            href={`/counterparties/${row.id}/statement?currency=${standing.code}`}
+                            title={t('counterparties.open_statement', { currency: standing.code })}
+                            className="hover:text-foreground focus-visible:ring-ring rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                            <MoneyDisplay amount={standing[field]} currency={standing.code} />
+                        </Link>
+                    ))}
+                </div>
+            )}
+        </td>
     );
 }

@@ -75,3 +75,39 @@ test('warns when paying out more than the client left, and records it anyway', a
 
     await expect(page.getByText('Movement recorded')).toBeVisible({ timeout: 10_000 });
 });
+
+/**
+ * Two figures on the list, and a way in to what is behind them.
+ *
+ * The list used to carry four bucket columns, which asks the reader to hold the whole
+ * model in their head to answer "does this client owe me anything". Two sides answer
+ * that; the split and the movements are one click away, which is what the columns were
+ * really for.
+ */
+test('summarises each side and opens the statement behind it', async ({ page }) => {
+    await page.goto('/counterparties');
+
+    const row = page.getByRole('row').filter({ hasText: CLIENT });
+
+    // Four bucket columns are gone; two sides in their place.
+    await expect(page.getByRole('columnheader', { name: 'Our money with them' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Their money with us' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Credit held' })).toBeHidden();
+    await expect(page.getByRole('columnheader', { name: 'Receivable' })).toBeHidden();
+
+    // The figure itself rather than a fixed one: the tests above this move it, and what
+    // matters is that the list and the statement agree — not what they agree on.
+    const figure = row.getByRole('link').filter({ hasText: /[0-9]/ }).first();
+    const shown = ((await figure.innerText()) ?? '').replace(/[^0-9,.]/g, '').trim();
+
+    expect(shown).not.toBe('');
+
+    // The figure is the way in. Following it lands on that currency's statement, which
+    // is where the buckets and the movements behind them are.
+    await figure.click();
+
+    await expect(page).toHaveURL(/\/statement\?currency=EGP/);
+    await expect(page.getByText('Credit held').first()).toBeVisible();
+    await expect(page.getByText(shown).first()).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'DEP-1' })).toBeVisible();
+});

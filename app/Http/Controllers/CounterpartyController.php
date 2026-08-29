@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Money\Money;
+use App\Domain\Reporting\CounterpartyStanding;
+use App\Domain\Reporting\CounterpartyStandings;
 use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Http\Requests\CounterpartyRequest;
@@ -19,27 +22,61 @@ use Inertia\Response;
 /**
  * Parties the business deals with.
  *
- * Positions are always sent to the client grouped by bucket, never summed. Section 5
- * forbids collapsing custody, receivable and payable into one figure, and a controller
- * that helpfully netted them for display would reintroduce exactly that.
+ * The two sides of a relationship are never added together. Section 5 forbids
+ * collapsing custody, receivable and payable into one figure, and a controller that
+ * helpfully netted them for display would reintroduce exactly that.
+ *
+ * A *side* is summed for the list — our money with them against their money with us —
+ * and the four buckets travel alongside it for the drill-down. See
+ * {@see CounterpartyStanding} for why one of those is a summary and the other is a
+ * loss of information.
  */
 final class CounterpartyController extends Controller
 {
+    public function __construct(private readonly CounterpartyStandings $standings) {}
+
     public function index(): Response
     {
         Gate::authorize('viewAny', Counterparty::class);
 
-        $counterparties = Counterparty::query()
+        $parties = Counterparty::query()
             ->with(['preferredCurrency', 'openingBalances.currency'])
             ->orderBy('name')
-            ->get()
-            ->map(fn (Counterparty $party): array => $this->present($party))
-            ->all();
+            ->get();
+
+        // One query for the whole list rather than one per row.
+        $standings = $this->standings->forParties(array_map(intval(...), array_values($parties->modelKeys())));
 
         return Inertia::render('counterparties/index', [
-            'counterparties' => $counterparties,
+            'counterparties' => $parties
+                ->map(fn (Counterparty $party): array => [
+                    ...$this->present($party),
+                    'standings' => $this->presentStandings($standings[$party->getKey()] ?? []),
+                ])
+                ->all(),
             'buckets' => $this->buckets(),
         ]);
+    }
+
+    /**
+     * @param  list<CounterpartyStanding>  $standings
+     * @return list<array<string, mixed>>
+     */
+    private function presentStandings(array $standings): array
+    {
+        return array_map(
+            fn (CounterpartyStanding $standing): array => [
+                'code' => $standing->code,
+                // Strings, never JSON numbers (R1).
+                'ours' => $standing->ours->toDisplayString(),
+                'theirs' => $standing->theirs->toDisplayString(),
+                'buckets' => array_map(
+                    fn (Money $amount): string => $amount->toDisplayString(),
+                    $standing->buckets,
+                ),
+            ],
+            $standings,
+        );
     }
 
     public function create(): Response
