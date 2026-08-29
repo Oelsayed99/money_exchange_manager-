@@ -124,9 +124,21 @@ php artisan db:seed --class=RolePermissionSeeder --force
 database". **Never `migrate:fresh`.** It drops every table, and it has already destroyed
 this application's database twice during development.
 
-There is also a `DemoSeeder`. **Do not run it in production** — it invents
-counterparties and transactions, and telling those apart from real ones afterwards is
-tedious at best.
+There are also `DemoSeeder` and `SampleDataSeeder`. **Neither belongs in production** —
+they invent counterparties and transactions, and telling those apart from real ones
+afterwards is tedious at best. `SampleDataSeeder` refuses to run when `APP_ENV` is
+`production`; `DemoSeeder` does not, so take care with that one.
+
+On a machine you are learning the application on:
+
+```bash
+php artisan db:seed --class=SampleDataSeeder
+```
+
+writes eight months of trading — a few hundred transactions across every type, four
+currencies, five locations and fourteen counterparties — through the same services the
+interface uses, so `ledger:verify` has something real to check. It appends and the
+ledger is append-only: `php artisan ledger:purge` is how you start over.
 
 `RolePermissionSeeder` is idempotent and safe to re-run — do so after any deployment
 that adds a permission, or new permissions exist and nobody holds them.
