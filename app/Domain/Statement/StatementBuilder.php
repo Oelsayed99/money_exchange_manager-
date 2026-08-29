@@ -6,7 +6,7 @@ namespace App\Domain\Statement;
 
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
+use App\Enums\EntryDirection;
 use App\Enums\LedgerOwnerType;
 use App\Enums\StatementMode;
 use App\Models\Counterparty;
@@ -42,67 +42,39 @@ final class StatementBuilder
         ?Carbon $from = null,
         ?Carbon $to = null,
     ): CounterpartyStatement {
-        $accounts = $this->accountsOf($counterparty, $currency);
+        $account = $this->accountOf($counterparty, $currency);
 
         $zero = $currency->zero();
-        $running = [];
-        $opening = [];
-        $totalIn = [];
-        $totalOut = [];
-
-        foreach (BalanceBucket::cases() as $bucket) {
-            $running[$bucket->value] = $zero;
-            $opening[$bucket->value] = $zero;
-            $totalIn[$bucket->value] = $zero;
-            $totalOut[$bucket->value] = $zero;
-        }
+        $running = $zero;
+        $opening = $zero;
+        $totalIn = $zero;
+        $totalOut = $zero;
 
         $rows = [];
         $profit = [];
         $profitCounted = [];
-        $used = [];
 
-        foreach ($this->entries($accounts, $mode, $to) as $entry) {
-            $account = $accounts[$entry->ledger_account_id] ?? null;
+        foreach ($this->entries($account, $mode, $to) as $entry) {
+            // A debit on the client's account means value went to them; a credit means
+            // it came from them. That is the whole sign convention, and it is why the
+            // account is an asset: the balance then reads positive when they owe us.
+            $signed = $entry->direction === EntryDirection::Debit ? $entry->amount : $entry->amount->negated();
 
-            if (! $account instanceof LedgerAccount) {
-                throw new RuntimeException(
-                    "Entry #{$entry->id} came back from a query restricted to this party's accounts "
-                    .'but does not belong to one. The query and the lookup have diverged.'
-                );
-            }
-
-            $bucket = $account->subkind->bucket();
-
-            if ($bucket === null) {
-                throw new RuntimeException(
-                    "Ledger account #{$account->id} is owned by a counterparty but its subkind "
-                    ."[{$account->subkind->value}] maps to no balance bucket."
-                );
-            }
-
-            // +1 means the entry increased the account in its own terms; what that says
-            // about the relationship depends on which side of the balance sheet it sits.
-            $signed = $account->kind->signFor($entry->direction) > 0
-                ? $entry->amount
-                : $entry->amount->negated();
-
-            $running[$bucket->value] = $running[$bucket->value]->plus($signed);
+            $running = $running->plus($signed);
 
             // Everything before the period is history: it sets the opening position and
             // is not listed.
             if ($from !== null && $entry->occurred_at->lt($from->copy()->startOfDay())) {
-                $opening[$bucket->value] = $running[$bucket->value];
+                $opening = $running;
 
                 continue;
             }
 
-            $used[$bucket->value] = true;
+            $out = $signed->isNegative() ? null : $signed;
+            $in = $signed->isNegative() ? $signed->absolute() : null;
 
-            [$in, $out] = $this->split($bucket, $signed);
-
-            $totalIn[$bucket->value] = $totalIn[$bucket->value]->plus($in ?? $currency->zero());
-            $totalOut[$bucket->value] = $totalOut[$bucket->value]->plus($out ?? $currency->zero());
+            $totalIn = $totalIn->plus($in ?? $zero);
+            $totalOut = $totalOut->plus($out ?? $zero);
 
             $transaction = $entry->transaction;
 
@@ -110,9 +82,8 @@ final class StatementBuilder
                 throw new RuntimeException("Ledger entry #{$entry->id} has no transaction.");
             }
 
-            // The margin belongs to the deal. A deal that touched two of this party's
-            // buckets produces two lines, and showing the profit on both would report
-            // it twice and total it twice.
+            // The margin belongs to the deal. A deal that touched this account twice
+            // produces two lines, and showing the profit on both would report it twice.
             $rowProfit = null;
 
             if ($mode->showsProfit() && ! isset($profitCounted[$transaction->id])) {
@@ -125,16 +96,19 @@ final class StatementBuilder
                 }
             }
 
+            [$moved, $rate] = $this->whatActuallyMoved($transaction, $currency);
+
             $rows[] = new StatementRow(
                 transactionId: $transaction->id,
                 type: $transaction->type,
                 occurredAt: $entry->occurred_at,
                 reference: $transaction->reference,
                 description: $transaction->description,
-                bucket: $bucket,
                 in: $in,
                 out: $out,
-                balanceAfter: $running[$bucket->value],
+                balanceAfter: $running,
+                movedAmount: $moved,
+                rate: $rate,
                 profit: $rowProfit,
             );
         }
@@ -148,7 +122,6 @@ final class StatementBuilder
             rows: $rows,
             opening: $opening,
             closing: $running,
-            buckets: $this->bucketsInPlay($used, $opening, $running),
             totalIn: $totalIn,
             totalOut: $totalOut,
             profit: $profit,
@@ -157,60 +130,48 @@ final class StatementBuilder
     }
 
     /**
-     * Which side of the relationship an entry moved value on.
+     * The money that physically moved, when it was not in this statement's currency.
      *
-     * The four buckets sit on both sides of the balance sheet, so the same arithmetic
-     * sign means opposite things depending on the bucket:
+     * Read from the transaction's own legs rather than recomputed: the leg in another
+     * currency is what the operator entered, and the rate beside it is what they agreed.
      *
-     *   credit_trust up    — they handed money over          → in
-     *   credit_trust down  — we paid some of it back         → out
-     *   receivable up      — they took money and now owe it  → out
-     *   receivable down    — they settled                    → in
-     *
-     * Increasing what we owe them, or reducing what they owe us, both mean value came
-     * from them. That is the whole rule.
-     *
-     * @return array{Money|null, Money|null}
+     * @return array{Money|null, string|null}
      */
-    private function split(BalanceBucket $bucket, Money $signed): array
+    private function whatActuallyMoved(Transaction $transaction, Currency $currency): array
     {
-        $increased = ! $signed->isNegative();
-        $fromThem = $bucket->isLiability() === $increased;
+        foreach ($transaction->legs as $leg) {
+            if ($leg->currency_id !== $currency->getKey()) {
+                return [$leg->amount, $transaction->customer_rate];
+            }
+        }
 
-        return $fromThem
-            ? [$signed->absolute(), null]
-            : [null, $signed->absolute()];
+        return [null, null];
     }
 
-    /**
-     * Every ledger account this party holds in this currency, keyed by id.
-     *
-     * @return array<int, LedgerAccount>
-     */
-    private function accountsOf(Counterparty $counterparty, Currency $currency): array
+    /** The party's running account in this currency. */
+    private function accountOf(Counterparty $counterparty, Currency $currency): ?LedgerAccount
     {
-        /** @var array<int, LedgerAccount> $accounts */
-        $accounts = LedgerAccount::query()
+        return LedgerAccount::query()
             ->where('owner_type', LedgerOwnerType::Counterparty->value)
             ->where('owner_id', $counterparty->getKey())
             ->where('currency_id', $currency->getKey())
-            ->get()
-            ->keyBy('id')
-            ->all();
-
-        return $accounts;
+            ->first();
     }
 
-    /**
-     * @param  array<int, LedgerAccount>  $accounts
-     * @return Collection<int, LedgerEntry>
-     */
-    private function entries(array $accounts, StatementMode $mode, ?Carbon $to): Collection
+    /** @return Collection<int, LedgerEntry> */
+    private function entries(?LedgerAccount $account, StatementMode $mode, ?Carbon $to): Collection
     {
+        if (! $account instanceof LedgerAccount) {
+            /** @var Collection<int, LedgerEntry> $empty */
+            $empty = LedgerEntry::query()->whereRaw('1 = 0')->get();
+
+            return $empty;
+        }
+
         // Client mode never selects the profit columns. This is the enforcement point
         // for Section 9: the figures are absent from the result set, so they cannot
         // reach a prop, a page source, or a printed document by accident.
-        $columns = ['id', 'type', 'status', 'occurred_at', 'reference', 'description', 'method'];
+        $columns = ['id', 'type', 'status', 'occurred_at', 'reference', 'description', 'method', 'customer_rate'];
 
         if ($mode->showsProfit()) {
             $columns = [...$columns, 'net_profit', 'profit_currency_id', 'profit_method', 'profit_status'];
@@ -219,9 +180,9 @@ final class StatementBuilder
         $until = $to?->copy()->endOfDay();
 
         return LedgerEntry::query()
-            ->whereIn('ledger_account_id', array_keys($accounts))
+            ->where('ledger_account_id', $account->getKey())
             ->when($until !== null, fn (Builder $query): Builder => $query->where('occurred_at', '<=', $until))
-            ->with(['transaction' => fn ($query) => $query->select($columns)])
+            ->with(['transaction' => fn ($query) => $query->select($columns)->with('legs')])
             // Sequence then id, so the two legs of one deal always read in the order
             // they were posted rather than whichever the database returns first.
             ->orderBy('occurred_at')
@@ -250,69 +211,21 @@ final class StatementBuilder
     }
 
     /**
-     * The buckets worth showing: any with a line, an opening balance or a closing one.
+     * An opening figure declared on the record but not posted to the ledger.
      *
-     * A column per bucket regardless would print four columns of zeros for a party who
-     * only ever left money on deposit. Showing only what is in play keeps the page
-     * readable without ever combining two of them.
-     *
-     * @param  array<string, bool>  $used
-     * @param  array<string, Money>  $opening
-     * @param  array<string, Money>  $closing
-     * @return list<BalanceBucket>
+     * Almost always absent: declaring one writes a transaction, and the transaction is
+     * in the rows above. What is left here is the unposted remainder.
      */
-    private function bucketsInPlay(array $used, array $opening, array $closing): array
+    private function declaredOpening(Counterparty $counterparty, Currency $currency): ?Money
     {
-        $buckets = [];
+        $row = $counterparty->openingBalances()->where('currency_id', $currency->getKey())->first();
 
-        foreach (BalanceBucket::cases() as $bucket) {
-            $inPlay = ($used[$bucket->value] ?? false)
-                || ! $opening[$bucket->value]->isZero()
-                || ! $closing[$bucket->value]->isZero();
-
-            if ($inPlay) {
-                $buckets[] = $bucket;
-            }
+        if ($row === null || $row->amount === null) {
+            return null;
         }
 
-        return $buckets;
-    }
+        $outstanding = $row->amount->minus($row->posted_amount ?? $currency->zero());
 
-    /**
-     * Opening positions declared on the record but not posted to the ledger.
-     *
-     * Since opening positions started posting, this is almost always empty — a figure
-     * typed on a counterparty now writes a transaction, and the transaction is in the
-     * rows above. What is left here is the *unposted* remainder: positions declared
-     * before that, which still owe the ledger an entry.
-     *
-     * @return array<string, Money>
-     */
-    private function declaredOpening(Counterparty $counterparty, Currency $currency): array
-    {
-        // One query for all four buckets. Asking per bucket was four queries to answer
-        // a question that is almost always "none".
-        $rows = $counterparty->openingBalances()
-            ->where('currency_id', $currency->getKey())
-            ->get();
-
-        $declared = [];
-
-        foreach (BalanceBucket::cases() as $bucket) {
-            $row = $rows->firstWhere('bucket', $bucket);
-            $amount = $row?->amount;
-
-            if ($amount === null) {
-                continue;
-            }
-
-            $outstanding = $amount->minus($row->posted_amount ?? $currency->zero());
-
-            if (! $outstanding->isZero()) {
-                $declared[$bucket->value] = $outstanding;
-            }
-        }
-
-        return $declared;
+        return $outstanding->isZero() ? null : $outstanding;
     }
 }

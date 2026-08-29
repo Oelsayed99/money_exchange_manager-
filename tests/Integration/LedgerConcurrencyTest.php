@@ -7,7 +7,6 @@ use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Counterparty;
@@ -35,7 +34,7 @@ beforeEach(function (): void {
 
     $this->deposit = function (string $amount): void {
         app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money($amount),
             occurredAt: now(),
@@ -62,7 +61,7 @@ function secondConnection(): PDO
 it('makes a second connection wait for a balance row that is locked', function (): void {
     ($this->deposit)('1000');
 
-    $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+    $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
     $other = secondConnection();
     $other->beginTransaction();
@@ -86,7 +85,7 @@ it('makes a second connection wait for a balance row that is locked', function (
 it('lets the second connection through once the lock is released', function (): void {
     ($this->deposit)('1000');
 
-    $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+    $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
     $other = secondConnection();
     $other->beginTransaction();
@@ -105,7 +104,7 @@ it('accumulates every posting without losing one', function (): void {
         ($this->deposit)('100');
     }
 
-    $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+    $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
     expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
         ->toBe('2500.00');

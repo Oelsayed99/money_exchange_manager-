@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Ledger;
 
-use App\Enums\BalanceBucket;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\LedgerOwnerType;
 use App\Models\Account;
@@ -38,13 +37,15 @@ final class LedgerAccountResolver
     }
 
     /** One of a counterparty's four positions. */
-    public function forBucket(BalanceBucket $bucket, Counterparty $counterparty, Currency $currency): LedgerAccount
+    /**
+     * A counterparty's running account in one currency.
+     *
+     * One per party per currency, and signed: a debit balance means they owe us, a
+     * credit balance means we are holding theirs. There used to be four of these.
+     */
+    public function forCounterparty(Counterparty $counterparty, Currency $currency): LedgerAccount
     {
-        return $this->resolve(
-            LedgerAccountSubkind::forBucket($bucket),
-            $counterparty->getKey(),
-            $currency,
-        );
+        return $this->resolve(LedgerAccountSubkind::ClientAccount, $counterparty->getKey(), $currency);
     }
 
     /** A system account: profit, fees, equity, or an FX clearing account. */

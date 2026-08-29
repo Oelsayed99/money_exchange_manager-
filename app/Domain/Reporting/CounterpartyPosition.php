@@ -18,7 +18,7 @@ use App\Enums\CounterpartyStatus;
 final readonly class CounterpartyPosition
 {
     /**
-     * @param  array<string, array<string, Money>>  $positions  currency code => bucket => balance
+     * @param  array<string, Money>  $positions  currency code => signed balance
      * @param  array<string, CounterpartyStatus>  $statusByCurrency  currency code => status
      */
     public function __construct(

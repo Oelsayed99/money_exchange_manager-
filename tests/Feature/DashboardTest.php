@@ -71,13 +71,13 @@ function dashboard(?DashboardFilters $filters = null)
 
 describe('status', function (): void {
     it('reads a party holding our money as owing us', function (): void {
-        movement(TransactionType::LoanGiven, party('Owes'), '400000');
+        movement(TransactionType::Out, party('Owes'), '400000');
 
         expect(dashboard()->counterparties[0]->status)->toBe(CounterpartyStatus::OwesUs);
     });
 
     it('reads a party whose money we hold as having credit', function (): void {
-        movement(TransactionType::CreditDeposit, party('Credit'), '500000');
+        movement(TransactionType::In, party('Credit'), '500000');
 
         expect(dashboard()->counterparties[0]->status)->toBe(CounterpartyStatus::HasCredit);
     });
@@ -86,8 +86,8 @@ describe('status', function (): void {
     // exist. 1,000,000 held and 400,000 owed is not 600,000 of anything.
     it('reads a party on both sides as both', function (): void {
         $both = party('Both');
-        movement(TransactionType::CreditDeposit, $both, '1000000');
-        movement(TransactionType::LoanGiven, $both, '400000');
+        movement(TransactionType::In, $both, '1000000');
+        movement(TransactionType::Out, $both, '400000');
 
         $row = dashboard()->counterparties[0];
 
@@ -100,8 +100,8 @@ describe('status', function (): void {
     // resolves once a currency is chosen.
     it('reads disagreeing currencies as both, and resolves them on filtering', function (): void {
         $split = party('Split');
-        movement(TransactionType::CreditDeposit, $split, '500000');
-        movement(TransactionType::LoanGiven, $split, '10000', $this->usd);
+        movement(TransactionType::In, $split, '500000');
+        movement(TransactionType::Out, $split, '10000', $this->usd);
 
         expect(dashboard()->counterparties[0]->status)->toBe(CounterpartyStatus::Mixed);
 
@@ -112,8 +112,8 @@ describe('status', function (): void {
 
     it('drops a party once everything is squared off', function (): void {
         $settled = party('Settled');
-        movement(TransactionType::CreditDeposit, $settled, '500000');
-        movement(TransactionType::CreditSettlement, $settled, '500000');
+        movement(TransactionType::In, $settled, '500000');
+        movement(TransactionType::Out, $settled, '500000');
 
         expect(dashboard()->counterparties)->toBe([]);
     });
@@ -121,8 +121,8 @@ describe('status', function (): void {
 
 describe('filtering', function (): void {
     beforeEach(function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
-        movement(TransactionType::LoanGiven, party('Borrower'), '400000');
+        movement(TransactionType::In, party('Holder'), '500000');
+        movement(TransactionType::Out, party('Borrower'), '400000');
     });
 
     it('narrows to one status', function (): void {
@@ -145,8 +145,8 @@ describe('filtering', function (): void {
 
 describe('the figures', function (): void {
     it('totals what is owed each way without netting them', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '1000000');
-        movement(TransactionType::LoanGiven, party('Borrower'), '400000');
+        movement(TransactionType::In, party('Holder'), '1000000');
+        movement(TransactionType::Out, party('Borrower'), '400000');
 
         $dashboard = dashboard();
 
@@ -156,8 +156,8 @@ describe('the figures', function (): void {
 
     it('counts what came in and what went out over the period', function (): void {
         $holder = party('Holder');
-        movement(TransactionType::CreditDeposit, $holder, '1000000', null, '2026-06-01');
-        movement(TransactionType::CreditSettlement, $holder, '250000', null, '2026-06-20');
+        movement(TransactionType::In, $holder, '1000000', null, '2026-06-01');
+        movement(TransactionType::Out, $holder, '250000', null, '2026-06-20');
 
         $dashboard = dashboard();
 
@@ -169,8 +169,8 @@ describe('the figures', function (): void {
     // question about now.
     it('narrows activity by date but leaves positions alone', function (): void {
         $holder = party('Holder');
-        movement(TransactionType::CreditDeposit, $holder, '1000000', null, '2026-05-01');
-        movement(TransactionType::CreditDeposit, $holder, '500000', null, '2026-06-01');
+        movement(TransactionType::In, $holder, '1000000', null, '2026-05-01');
+        movement(TransactionType::In, $holder, '500000', null, '2026-06-01');
 
         $june = dashboard(new DashboardFilters(from: Carbon::parse('2026-06-01')));
 
@@ -179,7 +179,7 @@ describe('the figures', function (): void {
     });
 
     it('reports cash in our own safes', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '1000000');
+        movement(TransactionType::In, party('Holder'), '1000000');
 
         expect(dashboard()->cashOnHand['EGP']->toDisplayString())->toBe('1000000.00');
     });
@@ -187,8 +187,8 @@ describe('the figures', function (): void {
     // A client filter narrows the relationship figures. The cash in the safe is not
     // anybody's in particular, so it stays whole.
     it('leaves cash on hand alone when a client is chosen', function (): void {
-        movement(TransactionType::CreditDeposit, party('A'), '1000000');
-        movement(TransactionType::CreditDeposit, party('B'), '600000');
+        movement(TransactionType::In, party('A'), '1000000');
+        movement(TransactionType::In, party('B'), '600000');
 
         $onlyA = dashboard(new DashboardFilters(counterparty: Counterparty::query()->where('name', 'A')->sole()));
 
@@ -200,7 +200,7 @@ describe('the figures', function (): void {
 describe('margin', function (): void {
     beforeEach(function (): void {
         $this->party = party('Trader');
-        movement(TransactionType::CreditDeposit, $this->party, '1000000', null, '2026-06-10');
+        movement(TransactionType::In, $this->party, '1000000', null, '2026-06-10');
 
         Transaction::query()->update([
             'net_profit' => '14000.0000000000',
@@ -215,7 +215,7 @@ describe('margin', function (): void {
 
     // No base currency, so no combined figure. Three currencies means three numbers.
     it('never adds margin across currencies', function (): void {
-        $usdDeal = movement(TransactionType::CreditDeposit, party('Other'), '5000', $this->usd);
+        $usdDeal = movement(TransactionType::In, party('Other'), '5000', $this->usd);
         $usdDeal->update(['net_profit' => '300.0000000000', 'profit_currency_id' => $this->usd->id]);
 
         $profit = dashboard()->profit;
@@ -237,12 +237,12 @@ describe('margin', function (): void {
 
 describe('the statistics', function (): void {
     it('counts clients by status, ignoring the status filter', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
-        movement(TransactionType::LoanGiven, party('Borrower'), '400000');
+        movement(TransactionType::In, party('Holder'), '500000');
+        movement(TransactionType::Out, party('Borrower'), '400000');
 
         $both = party('Both');
-        movement(TransactionType::CreditDeposit, $both, '900000');
-        movement(TransactionType::LoanGiven, $both, '100000');
+        movement(TransactionType::In, $both, '900000');
+        movement(TransactionType::Out, $both, '100000');
 
         // The split describes the whole book, so narrowing to one status must not
         // reduce the chart to a single slice.
@@ -253,16 +253,16 @@ describe('the statistics', function (): void {
 
     // Settled parties drop out of the list entirely, so the slice would always be nought.
     it('leaves settled out of the split', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+        movement(TransactionType::In, party('Holder'), '500000');
 
         expect(array_keys(dashboard()->statusCounts))->not->toContain('settled');
     });
 
     it('breaks money in and out down by month for one currency', function (): void {
         $holder = party('Holder');
-        movement(TransactionType::CreditDeposit, $holder, '500000', null, '2026-05-10');
-        movement(TransactionType::CreditDeposit, $holder, '300000', null, '2026-06-10');
-        movement(TransactionType::CreditSettlement, $holder, '200000', null, '2026-06-20');
+        movement(TransactionType::In, $holder, '500000', null, '2026-05-10');
+        movement(TransactionType::In, $holder, '300000', null, '2026-06-10');
+        movement(TransactionType::Out, $holder, '200000', null, '2026-06-20');
 
         $flow = dashboard(new DashboardFilters(currency: $this->egp))->monthlyFlow;
 
@@ -275,16 +275,16 @@ describe('the statistics', function (): void {
     // Bars of one currency beside bars of another would be read as a comparison, and
     // adding them into one bar would be arithmetic on quantities that cannot be added.
     it('draws no flow chart without a currency', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+        movement(TransactionType::In, party('Holder'), '500000');
 
         expect(dashboard()->monthlyFlow)->toBe([]);
     });
 
     it('ranks the largest positions, keeping both sides apart', function (): void {
         $big = party('Big');
-        movement(TransactionType::CreditDeposit, $big, '1000000');
-        movement(TransactionType::LoanGiven, $big, '400000');
-        movement(TransactionType::CreditDeposit, party('Small'), '5000');
+        movement(TransactionType::In, $big, '1000000');
+        movement(TransactionType::Out, $big, '400000');
+        movement(TransactionType::In, party('Small'), '5000');
 
         $top = dashboard(new DashboardFilters(currency: $this->egp))->topClients;
 
@@ -295,14 +295,14 @@ describe('the statistics', function (): void {
     });
 
     it('shows no ranking without a currency', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '500000');
+        movement(TransactionType::In, party('Holder'), '500000');
 
         expect(dashboard()->topClients)->toBe([]);
     });
 
     it('draws no more than eight clients', function (): void {
         foreach (range(1, 12) as $n) {
-            movement(TransactionType::CreditDeposit, party("Client {$n}"), (string) (1000 * $n));
+            movement(TransactionType::In, party("Client {$n}"), (string) (1000 * $n));
         }
 
         expect(dashboard(new DashboardFilters(currency: $this->egp))->topClients)->toHaveCount(8);
@@ -328,7 +328,7 @@ describe('the screen', function (): void {
     });
 
     it('carries the filters through the url', function (): void {
-        movement(TransactionType::LoanGiven, party('Borrower'), '400000');
+        movement(TransactionType::Out, party('Borrower'), '400000');
 
         $this->actingAs($this->operator)
             ->get('/dashboard?status=owes_us&currency=EGP')
@@ -354,7 +354,7 @@ describe('the screen', function (): void {
 
     // Risk R1 on one more screen.
     it('sends every amount as a string', function (): void {
-        movement(TransactionType::CreditDeposit, party('Holder'), '1000000');
+        movement(TransactionType::In, party('Holder'), '1000000');
 
         $props = $this->actingAs($this->operator)->get('/dashboard')->viewData('page')['props'];
 

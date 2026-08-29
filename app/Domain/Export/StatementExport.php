@@ -38,9 +38,10 @@ final class StatementExport implements Exportable
             __('statements.columns.in'),
             __('statements.columns.out'),
             __('statements.columns.position'),
-            // Which of the four positions the line moved — not a bucket name.
-            __('statements.columns.bucket'),
             __('common.currency'),
+            // What actually changed hands, when it was not this statement's currency.
+            __('statements.columns.moved'),
+            __('statements.columns.rate'),
         ];
 
         if ($this->statement->mode->showsProfit()) {
@@ -77,8 +78,9 @@ final class StatementExport implements Exportable
             $row->in?->toDisplayString() ?? '',
             $row->out?->toDisplayString() ?? '',
             $row->balanceAfter->toDisplayString(),
-            __('statements.positions.'.$row->bucket->value),
             $this->statement->currency->code,
+            $row->movedAmount === null ? '' : $row->movedAmount->toDisplayString().' '.$row->movedAmount->currency->code,
+            $row->rate ?? '',
         ];
 
         if ($this->statement->mode->showsProfit()) {

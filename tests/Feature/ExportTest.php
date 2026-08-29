@@ -32,7 +32,7 @@ beforeEach(function (): void {
     $this->operator->assignRole(Role::Operator->value);
 
     app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $this->egp,
         amount: $this->egp->money('3957540'),
         occurredAt: new DateTimeImmutable('2026-06-01'),
@@ -157,7 +157,7 @@ describe('formula injection', function (): void {
         $this->attacker = Counterparty::factory()->create(['name' => '=HYPERLINK("http://evil","click")']);
 
         app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money('100'),
             occurredAt: new DateTimeImmutable('2026-06-02'),

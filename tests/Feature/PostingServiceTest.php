@@ -10,7 +10,6 @@ use App\Domain\Ledger\PostingRequest;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
-use App\Enums\BalanceBucket;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\MovementMethod;
@@ -43,8 +42,8 @@ beforeEach(function (): void {
 
     $this->cashEgp = $this->resolver->forAccount($this->safe, $this->egp);
     $this->cashUsd = $this->resolver->forAccount($this->safe, $this->usd);
-    $this->creditEgp = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
-    $this->receivableEgp = $this->resolver->forBucket(BalanceBucket::Receivable, $this->party, $this->egp);
+    $this->creditEgp = $this->resolver->forCounterparty($this->party, $this->egp);
+    $this->receivableEgp = $this->resolver->forCounterparty($this->party, $this->egp);
 });
 
 /** A credit deposit: money in, liability up. */
@@ -54,7 +53,7 @@ function creditDeposit(string $amount, ?string $key = null, TransactionStatus $s
     $money = $test->egp->money($amount);
 
     return new PostingRequest(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         occurredAt: now(),
         entries: [
             EntryDraft::debit($test->cashEgp, $money),
@@ -78,7 +77,7 @@ describe('the balancing invariant', function (): void {
 
     it('refuses a transaction whose sides do not agree', function (): void {
         expect(fn () => $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -89,7 +88,7 @@ describe('the balancing invariant', function (): void {
 
     it('reports the difference so the mistake is findable', function (): void {
         expect(fn () => $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -145,7 +144,7 @@ describe('the balancing invariant', function (): void {
     it('writes nothing at all when a posting is refused', function (): void {
         try {
             $this->posting->post(new PostingRequest(
-                type: TransactionType::CreditDeposit,
+                type: TransactionType::In,
                 occurredAt: now(),
                 entries: [
                     EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -206,7 +205,7 @@ describe('balances', function (): void {
         $this->posting->post(creditDeposit('3957540'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditSettlement,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->creditEgp, $this->egp->money('2574000')),
@@ -225,7 +224,7 @@ describe('balances', function (): void {
         $this->posting->post(creditDeposit('100'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditSettlement,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->creditEgp, $this->egp->money('150')),
@@ -251,7 +250,7 @@ describe('pending and available', function (): void {
         $this->posting->post(creditDeposit('1000'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::MoneyPaid,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->receivableEgp, $this->egp->money('300')),

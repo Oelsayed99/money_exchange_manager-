@@ -7,7 +7,6 @@ use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\Role;
 use App\Enums\TransactionType;
 use App\Models\Account;
@@ -42,7 +41,7 @@ function movementPayload(array $overrides = []): array
     $test = test();
 
     return [
-        'type' => 'credit_deposit',
+        'type' => 'in',
         'occurred_at' => '2026-06-10',
         'currency_id' => $test->egp->id,
         'amount' => '500000',
@@ -86,7 +85,7 @@ describe('the form', function (): void {
         // An exchange needs two amounts and a rate; a reversal is never created directly.
         expect($offered)->not->toContain('currency_exchange')
             ->and($offered)->not->toContain('reversal')
-            ->and($offered)->toContain('credit_deposit', 'loan_given', 'loan_received', 'transfer');
+            ->and($offered)->toContain('in', 'out', 'in', 'transfer');
     });
 
     // The form shows and requires the right fields from what the type declares, rather
@@ -95,9 +94,9 @@ describe('the form', function (): void {
         $props = $this->actingAs($this->operator)->get('/movements')->viewData('page')['props'];
         $types = collect($props['types'])->keyBy('value');
 
-        expect($types['credit_deposit']['needsCounterparty'])->toBeTrue()
-            ->and($types['credit_deposit']['bucket'])->toBe('credit_trust')
-            ->and($types['credit_deposit']['increases'])->toBeTrue()
+        expect($types['in']['needsCounterparty'])->toBeTrue()
+            ->and($types['in']['bucket'])->toBe('credit_trust')
+            ->and($types['in']['increases'])->toBeTrue()
             ->and($types['transfer']['needsDestinationAccount'])->toBeTrue()
             ->and($types['transfer']['needsCounterparty'])->toBeFalse()
             ->and($types['opening_balance']['needsBucket'])->toBeTrue();
@@ -115,7 +114,7 @@ describe('recording', function (): void {
 
     it('records money lent as something they owe', function (): void {
         $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_given', 'amount' => '400000',
+            'type' => 'out', 'amount' => '400000',
         ]));
 
         expect(bucketOf(BalanceBucket::Receivable))->toBe('400000.00');
@@ -123,15 +122,15 @@ describe('recording', function (): void {
 
     it('records money borrowed as something we owe', function (): void {
         $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_received', 'amount' => '300000',
+            'type' => 'in', 'amount' => '300000',
         ]));
 
         expect(bucketOf(BalanceBucket::Payable))->toBe('300000.00');
     });
 
     it('reduces what they owe when they settle', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'loan_given', 'amount' => '400000']));
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'receivable_settlement', 'amount' => '150000']));
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'out', 'amount' => '400000']));
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'in', 'amount' => '150000']));
 
         expect(bucketOf(BalanceBucket::Receivable))->toBe('250000.00');
     });
@@ -214,7 +213,7 @@ describe('the positions panel', function (): void {
         $response = $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'credit_deposit',
+            'type' => 'in',
             'amount' => '200000',
         ]);
 
@@ -228,7 +227,7 @@ describe('the positions panel', function (): void {
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
+            'type' => 'out',
             'amount' => '200000',
         ])->assertJsonPath('after.amount.amount', '300000.00');
     });
@@ -254,7 +253,7 @@ describe('the negative credit warning', function (): void {
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
+            'type' => 'out',
             'amount' => '150000',
         ])->assertJsonPath('negative_warning', 'credit_trust')
             ->assertJsonPath('after.amount.amount', '-50000.00');
@@ -277,12 +276,12 @@ describe('the negative credit warning', function (): void {
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'money_paid',
+            'type' => 'out',
             'amount' => '100000',
         ])->assertJsonPath('negative_warning', 'payable')
             ->assertJsonPath('instead.bucket', 'credit_trust')
             ->assertJsonPath('instead.amount.amount', '400000.00')
-            ->assertJsonPath('instead.type', 'credit_settlement');
+            ->assertJsonPath('instead.type', 'out');
     });
 
     // Money we owe is not money they owe. Suggesting one for the other would be worse
@@ -290,14 +289,14 @@ describe('the negative credit warning', function (): void {
     it('never points across the two sides', function (): void {
         // They owe us 50,000; nothing of theirs is in our hands.
         $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_given',
+            'type' => 'out',
             'amount' => '50000',
         ]));
 
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
+            'type' => 'out',
             'amount' => '10000',
         ])->assertJsonPath('negative_warning', 'credit_trust')
             ->assertJsonPath('instead', null);
@@ -307,7 +306,7 @@ describe('the negative credit warning', function (): void {
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'money_paid',
+            'type' => 'out',
             'amount' => '100000',
         ])->assertJsonPath('negative_warning', 'payable')
             ->assertJsonPath('instead', null);
@@ -319,7 +318,7 @@ describe('the negative credit warning', function (): void {
         $this->actingAs($this->operator)->postJson('/movements/positions', [
             'counterparty_id' => $this->party->id,
             'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
+            'type' => 'out',
             'amount' => '200000',
         ])->assertJsonPath('negative_warning', null);
     });
@@ -330,7 +329,7 @@ describe('the negative credit warning', function (): void {
         $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '100000']));
 
         $this->actingAs($this->operator)
-            ->post('/movements', movementPayload(['type' => 'credit_settlement', 'amount' => '150000']))
+            ->post('/movements', movementPayload(['type' => 'out', 'amount' => '150000']))
             ->assertSessionHasNoErrors();
 
         expect(bucketOf(BalanceBucket::CreditTrust))->toBe('-50000.00');

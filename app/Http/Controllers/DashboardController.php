@@ -11,7 +11,6 @@ use App\Domain\Reporting\CounterpartyPosition;
 use App\Domain\Reporting\Dashboard;
 use App\Domain\Reporting\DashboardFilters;
 use App\Domain\Reporting\DashboardQuery;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyStatus;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -83,13 +82,6 @@ final class DashboardController extends Controller
                     ],
                     CounterpartyStatus::cases(),
                 ),
-                'buckets' => array_map(
-                    fn (BalanceBucket $b): array => [
-                        'value' => $b->value,
-                        'label' => __('counterparties.buckets.'.$b->value),
-                    ],
-                    BalanceBucket::cases(),
-                ),
             ],
         ]);
     }
@@ -155,10 +147,8 @@ final class DashboardController extends Controller
                         fn (CounterpartyStatus $s): string => $s->value,
                         $party->statusByCurrency,
                     ),
-                    'positions' => array_map(
-                        fn (array $buckets): array => $this->amounts($buckets),
-                        $party->positions,
-                    ),
+                    // One signed balance per currency: positive means they owe us.
+                    'positions' => $this->amounts($party->positions),
                 ],
                 $dashboard->counterparties,
             ),

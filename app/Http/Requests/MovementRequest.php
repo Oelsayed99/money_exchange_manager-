@@ -7,7 +7,6 @@ namespace App\Http\Requests;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
 use App\Models\Account;
@@ -65,10 +64,15 @@ final class MovementRequest extends FormRequest
                 Rule::exists('counterparties', 'id')->whereNull('deleted_at'),
             ],
 
-            'bucket' => [
-                $type?->needsBucket() === true && $this->input('counterparty_id') !== null ? 'required' : 'nullable',
-                Rule::enum(BalanceBucket::class),
+            // The money that actually changed hands, when it was not the currency the
+            // movement is being recorded in. Both or neither.
+            'cash_currency_id' => [
+                $type?->mayConvert() === true ? 'nullable' : 'prohibited',
+                'integer',
+                Rule::exists('currencies', 'id'),
             ],
+            'cash_amount' => ['nullable', 'required_with:cash_currency_id', 'string'],
+            'rate' => ['nullable', 'required_with:cash_currency_id', 'string'],
 
             'method' => ['nullable', Rule::enum(MovementMethod::class)],
             'reference' => ['nullable', 'string', 'max:255'],
@@ -125,6 +129,10 @@ final class MovementRequest extends FormRequest
         $currency = Currency::query()->findOrFail((int) $this->validated('currency_id'));
         $type = TransactionType::from((string) $this->validated('type'));
 
+        $cashCurrency = $this->validated('cash_currency_id') !== null
+            ? Currency::query()->find((int) $this->validated('cash_currency_id'))
+            : null;
+
         return new TransactionInput(
             type: $type,
             currency: $currency,
@@ -137,9 +145,11 @@ final class MovementRequest extends FormRequest
             counterparty: $this->validated('counterparty_id') !== null
                 ? Counterparty::query()->find((int) $this->validated('counterparty_id'))
                 : null,
-            bucket: $this->validated('bucket') !== null
-                ? BalanceBucket::from((string) $this->validated('bucket'))
+            cashCurrency: $cashCurrency,
+            cashAmount: $cashCurrency instanceof Currency && $this->validated('cash_amount') !== null
+                ? $cashCurrency->money((string) $this->validated('cash_amount'))
                 : null,
+            rate: $this->validated('rate'),
             method: $this->validated('method') !== null
                 ? MovementMethod::from((string) $this->validated('method'))
                 : null,

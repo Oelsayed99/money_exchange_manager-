@@ -104,7 +104,7 @@ final class E2eSeeder extends Seeder
         // Nine deposits totalling 3,957,540, exactly as the sheet has them.
         foreach ([500000, 500000, 400000, 457540, 400000, 500000, 400000, 400000, 400000] as $index => $amount) {
             $posting->post($rules->build(new TransactionInput(
-                type: TransactionType::CreditDeposit,
+                type: TransactionType::In,
                 currency: $egp,
                 amount: $egp->money((string) $amount),
                 occurredAt: new \DateTimeImmutable('2026-06-'.str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT)),

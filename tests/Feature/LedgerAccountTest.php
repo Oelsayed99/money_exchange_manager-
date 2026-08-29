@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountKind;
 use App\Enums\LedgerAccountSubkind;

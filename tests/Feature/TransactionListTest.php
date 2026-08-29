@@ -113,7 +113,7 @@ describe('what it shows', function (): void {
     });
 
     it('names the counterparty when there is one', function (): void {
-        record(TransactionType::CreditDeposit, ['counterparty' => $this->client]);
+        record(TransactionType::In, ['counterparty' => $this->client]);
 
         listing()->assertInertia(fn (Assert $page) => $page
             ->where('transactions.data.0.counterparty.name', 'سالم التجريبي'));
@@ -151,7 +151,7 @@ describe('what it shows', function (): void {
 describe('filtering', function (): void {
     beforeEach(function (): void {
         record(TransactionType::Deposit, ['amount' => '5000', 'date' => '2026-05-01', 'reference' => 'MAY']);
-        record(TransactionType::CreditDeposit, ['amount' => '9000', 'date' => '2026-06-10', 'counterparty' => $this->client, 'description' => 'trust money']);
+        record(TransactionType::In, ['amount' => '9000', 'date' => '2026-06-10', 'counterparty' => $this->client, 'description' => 'trust money']);
         record(TransactionType::Deposit, ['amount' => '700', 'date' => '2026-07-01', 'currency' => $this->usd]);
     });
 

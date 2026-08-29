@@ -6,7 +6,6 @@ namespace App\Http\Requests;
 
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Models\Counterparty;
 use Illuminate\Foundation\Http\FormRequest;
@@ -38,7 +37,6 @@ final class CounterpartyRequest extends FormRequest
             'is_active' => ['required', 'boolean'],
 
             'positions' => ['array'],
-            'positions.*.bucket' => ['required', Rule::enum(BalanceBucket::class)],
             'positions.*.currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
             'positions.*.amount' => ['required', 'string'],
         ];
@@ -47,13 +45,13 @@ final class CounterpartyRequest extends FormRequest
     protected function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            /** @var array<int, array{bucket?: string, currency_id?: int|string, amount?: string}> $rows */
+            /** @var array<int, array{currency_id?: int|string, amount?: string}> $rows */
             $rows = $this->input('positions', []);
 
             $seen = [];
 
             foreach ($rows as $index => $row) {
-                $key = ($row['bucket'] ?? '').':'.($row['currency_id'] ?? '');
+                $key = (string) ($row['currency_id'] ?? '');
 
                 if (in_array($key, $seen, true)) {
                     $validator->errors()->add("positions.{$index}.amount", __('validation.distinct', [
@@ -68,20 +66,6 @@ final class CounterpartyRequest extends FormRequest
                 if (! Decimal::isValid($amount)) {
                     $validator->errors()->add("positions.{$index}.amount", __('validation.numeric', [
                         'attribute' => __('counterparties.opening_positions'),
-                    ]));
-
-                    continue;
-                }
-
-                // Section 5: a negative receivable is a payable. Accepting one here
-                // would record the right information in the wrong bucket with the
-                // wrong sign — netting correctly in a total, wrong in every statement.
-                if (str_starts_with($amount, '-')) {
-                    $bucket = BalanceBucket::tryFrom($row['bucket'] ?? '');
-
-                    $validator->errors()->add("positions.{$index}.amount", __('counterparties.negative_not_allowed', [
-                        'bucket' => $bucket?->label() ?? '',
-                        'mirror' => $bucket?->mirror()->label() ?? '',
                     ]));
 
                     continue;

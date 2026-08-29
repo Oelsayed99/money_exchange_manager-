@@ -12,7 +12,6 @@ use App\Domain\Statement\StatementBuilder;
 use App\Domain\Statement\StatementFilename;
 use App\Domain\Statement\StatementPdf;
 use App\Domain\Statement\StatementRow;
-use App\Enums\BalanceBucket;
 use App\Enums\LedgerOwnerType;
 use App\Enums\StatementMode;
 use App\Models\Counterparty;
@@ -60,7 +59,6 @@ final class CounterpartyStatementController extends Controller
                 'statement' => null,
                 'filters' => ['currency' => null, 'mode' => StatementMode::Client->value, 'from' => null, 'to' => null],
                 'modes' => $this->modes(),
-                'bucketLabels' => $this->bucketLabels(),
             ]);
         }
 
@@ -75,7 +73,6 @@ final class CounterpartyStatementController extends Controller
                 'to' => $statement->to?->toDateString(),
             ],
             'modes' => $this->modes(),
-            'bucketLabels' => $this->bucketLabels(),
         ]);
     }
 
@@ -189,17 +186,19 @@ final class CounterpartyStatementController extends Controller
             'decimal_places' => $statement->currency->decimal_places,
             'mode' => $statement->mode->value,
             'shows_profit' => $statement->mode->showsProfit(),
-            'buckets' => array_map(fn (BalanceBucket $b): string => $b->value, $statement->buckets),
             'rows' => array_map(fn (StatementRow $row): array => $this->presentRow($row), $statement->rows),
-            'opening' => $this->presentBalances($statement->opening, $statement->buckets),
-            'closing' => $this->presentBalances($statement->closing, $statement->buckets),
-            'total_in' => $this->presentBalances($statement->totalIn, $statement->buckets),
-            'total_out' => $this->presentBalances($statement->totalOut, $statement->buckets),
+            'opening' => $statement->opening->jsonSerialize(),
+            'closing' => $statement->closing->jsonSerialize(),
+            'total_in' => $statement->totalIn->jsonSerialize(),
+            'total_out' => $statement->totalOut->jsonSerialize(),
+            // Which way the closing balance runs, said in words rather than left to a
+            // minus sign on a page somebody is holding.
+            'they_owe_us' => $statement->theyOweUs(),
             // Absent entirely in Client mode, not merely empty.
             'profit' => $statement->mode->showsProfit()
                 ? array_map(fn (Money $m): array => $m->jsonSerialize(), $statement->profit)
                 : null,
-            'declared_opening' => array_map(fn (Money $m): array => $m->jsonSerialize(), $statement->declaredOpening),
+            'declared_opening' => $statement->declaredOpening?->jsonSerialize(),
         ];
     }
 
@@ -213,33 +212,15 @@ final class CounterpartyStatementController extends Controller
             'occurred_at' => $row->occurredAt->toDateString(),
             'reference' => $row->reference,
             'description' => $row->description,
-            'bucket' => $row->bucket->value,
             // Every amount a string, never a JSON number (R1).
             'in' => $row->in?->jsonSerialize(),
             'out' => $row->out?->jsonSerialize(),
             'balance_after' => $row->balanceAfter->jsonSerialize(),
+            // What actually changed hands, when it was not this statement's currency.
+            'moved' => $row->movedAmount?->jsonSerialize(),
+            'rate' => $row->rate,
             'profit' => $row->profit?->jsonSerialize(),
         ];
-    }
-
-    /**
-     * @param  array<string, Money>  $balances
-     * @param  list<BalanceBucket>  $buckets
-     * @return array<string, array{amount: string, currency: string}>
-     */
-    private function presentBalances(array $balances, array $buckets): array
-    {
-        $presented = [];
-
-        foreach ($buckets as $bucket) {
-            $amount = $balances[$bucket->value] ?? null;
-
-            if ($amount instanceof Money) {
-                $presented[$bucket->value] = $amount->jsonSerialize();
-            }
-        }
-
-        return $presented;
     }
 
     /** @return list<array{value: string, label: string}> */
@@ -249,28 +230,5 @@ final class CounterpartyStatementController extends Controller
             fn (StatementMode $mode): array => ['value' => $mode->value, 'label' => __('statements.modes.'.$mode->value)],
             StatementMode::cases(),
         );
-    }
-
-    /**
-     * Each bucket's name and, separately, how a position in it reads on a page.
-     *
-     * "Credit / trust" names the bucket; "Client credit" is what a balance in it means
-     * to whoever is holding the statement. The second is what stops the reader having
-     * to interpret a sign.
-     *
-     * @return array<string, array{label: string, position: string}>
-     */
-    private function bucketLabels(): array
-    {
-        $labels = [];
-
-        foreach (BalanceBucket::cases() as $bucket) {
-            $labels[$bucket->value] = [
-                'label' => __('counterparties.buckets.'.$bucket->value),
-                'position' => __('statements.positions.'.$bucket->value),
-            ];
-        }
-
-        return $labels;
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -42,23 +41,18 @@ final class CounterpartyFactory extends Factory
     }
 
     /**
-     * Declare opening positions.
+     * Declare where the relationship started.
      *
-     * @param  array<string, array<string, string>>  $positions  bucket value => (currency code => amount)
+     * @param  array<string, string>  $positions  currency code => signed amount;
+     *                                            positive means they owe us
      */
     public function withPositions(array $positions): self
     {
         return $this->afterCreating(function (Counterparty $counterparty) use ($positions): void {
-            foreach ($positions as $bucket => $amounts) {
-                foreach ($amounts as $code => $amount) {
-                    $currency = Currency::query()->where('code', strtoupper($code))->firstOrFail();
+            foreach ($positions as $code => $amount) {
+                $currency = Currency::query()->where('code', strtoupper($code))->firstOrFail();
 
-                    $counterparty->setOpeningBalance(
-                        BalanceBucket::from($bucket),
-                        $currency,
-                        $currency->money($amount),
-                    );
-                }
+                $counterparty->setOpeningBalance($currency, $currency->money($amount));
             }
         });
     }

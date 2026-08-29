@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Enums\AccountType;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Models\Account;
 use App\Models\Counterparty;
@@ -43,10 +42,9 @@ final class DemoSeeder extends Seeder
             ],
         );
 
-        // Money of theirs still sitting with us, and a small amount they owe back —
-        // two distinct positions against the same party, at the same time.
-        $party->setOpeningBalance(BalanceBucket::CreditTrust, $egp, $egp->money('899510.00'));
-        $party->setOpeningBalance(BalanceBucket::Receivable, $egp, $egp->money('14890.00'));
+        // Money of theirs still sitting with us, less the little they owe back: one
+        // signed figure, negative because the balance is in their favour.
+        $party->setOpeningBalance($egp, $egp->money('-884620.00'));
 
         $office = Account::query()->firstOrCreate(
             ['name' => 'Office safe'],

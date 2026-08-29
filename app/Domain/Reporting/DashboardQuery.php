@@ -6,7 +6,6 @@ namespace App\Domain\Reporting;
 
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyStatus;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
@@ -131,21 +130,16 @@ final class DashboardQuery
         $out = [];
 
         foreach ($rows as $row) {
-            $subkind = LedgerAccountSubkind::from((string) $row->subkind);
-            $bucket = $subkind->bucket();
-
-            if ($bucket === null) {
+            if (! LedgerAccountSubkind::from((string) $row->subkind)->isCounterpartyPosition()) {
                 continue;
             }
 
             $spec = $this->currencies->byId((int) $row->currency_id);
             $amount = Money::of((string) $row->total, $spec);
 
-            $increased = $subkind->kind()->signFor(EntryDirection::from((string) $row->direction)) > 0;
-
-            // The statement's rule, unchanged: increasing what we owe them, or reducing
-            // what they owe us, both mean value came from them.
-            $fromThem = $bucket->isLiability() === $increased;
+            // One account, so the direction says it outright: a credit is money they
+            // gave us, a debit is money we gave them.
+            $fromThem = EntryDirection::from((string) $row->direction) === EntryDirection::Credit;
 
             if ($fromThem) {
                 $in[$spec->code] = isset($in[$spec->code]) ? $in[$spec->code]->plus($amount) : $amount;
@@ -260,9 +254,7 @@ final class DashboardQuery
         $owedToThem = [];
 
         foreach ($positions as $row) {
-            $bucket = LedgerAccountSubkind::from($row['subkind'])->bucket();
-
-            if ($bucket === null) {
+            if (! LedgerAccountSubkind::from($row['subkind'])->isCounterpartyPosition()) {
                 continue;
             }
 
@@ -273,10 +265,14 @@ final class DashboardQuery
                 continue;
             }
 
-            if ($bucket->isAsset()) {
+            // One signed balance per party, so which side it lands on is its sign.
+            // Reported apart rather than netted: "clients owe me 400,000 and I am
+            // holding 900,000 for others" is two facts a single figure would lose.
+            if ($amount->isPositive()) {
                 $owedToUs[$spec->code] = isset($owedToUs[$spec->code]) ? $owedToUs[$spec->code]->plus($amount) : $amount;
             } else {
-                $owedToThem[$spec->code] = isset($owedToThem[$spec->code]) ? $owedToThem[$spec->code]->plus($amount) : $amount;
+                $absolute = $amount->absolute();
+                $owedToThem[$spec->code] = isset($owedToThem[$spec->code]) ? $owedToThem[$spec->code]->plus($absolute) : $absolute;
             }
         }
 
@@ -291,13 +287,11 @@ final class DashboardQuery
      */
     private function parties(array $positions): array
     {
-        /** @var array<int, array<string, array<string, Money>>> $byParty */
+        /** @var array<int, array<string, Money>> $byParty */
         $byParty = [];
 
         foreach ($positions as $row) {
-            $bucket = LedgerAccountSubkind::from($row['subkind'])->bucket();
-
-            if ($bucket === null) {
+            if (! LedgerAccountSubkind::from($row['subkind'])->isCounterpartyPosition()) {
                 continue;
             }
 
@@ -308,7 +302,7 @@ final class DashboardQuery
                 continue;
             }
 
-            $byParty[$row['owner_id']][$spec->code][$bucket->value] = $amount;
+            $byParty[$row['owner_id']][$spec->code] = $amount;
         }
 
         $names = Counterparty::query()
@@ -322,10 +316,10 @@ final class DashboardQuery
 
             $statusByCurrency = [];
 
-            foreach ($currencies as $code => $buckets) {
+            foreach ($currencies as $code => $balance) {
                 $statusByCurrency[$code] = CounterpartyStatus::forSides(
-                    $this->holds($buckets, BalanceBucket::Receivable, BalanceBucket::Custody),
-                    $this->holds($buckets, BalanceBucket::Payable, BalanceBucket::CreditTrust),
+                    $balance->isPositive(),
+                    $balance->isNegative(),
                 );
             }
 
@@ -380,18 +374,16 @@ final class DashboardQuery
         $flow = [];
 
         foreach ($rows as $row) {
-            $subkind = LedgerAccountSubkind::from((string) $row->subkind);
-            $bucket = $subkind->bucket();
-
-            if ($bucket === null) {
+            if (! LedgerAccountSubkind::from((string) $row->subkind)->isCounterpartyPosition()) {
                 continue;
             }
 
             $month = (string) $row->month;
             $flow[$month] ??= ['in' => Money::zero($spec), 'out' => Money::zero($spec)];
 
-            $increased = $subkind->kind()->signFor(EntryDirection::from((string) $row->direction)) > 0;
-            $side = $bucket->isLiability() === $increased ? 'in' : 'out';
+            // A credit on a client's account is money they gave us; a debit is money
+            // that went to them.
+            $side = EntryDirection::from((string) $row->direction) === EntryDirection::Credit ? 'in' : 'out';
 
             $flow[$month][$side] = $flow[$month][$side]->plus(Money::of((string) $row->total, $spec));
         }
@@ -453,24 +445,22 @@ final class DashboardQuery
         $totals = [];
 
         foreach ($parties as $party) {
-            $buckets = $party->positions[$code] ?? null;
+            $balance = $party->positions[$code] ?? null;
 
-            if ($buckets === null) {
+            if (! $balance instanceof Money) {
                 continue;
             }
 
-            $owedToUs = Money::zero($spec);
-            $owedToThem = Money::zero($spec);
-
-            foreach ($buckets as $bucket => $amount) {
-                if (BalanceBucket::from($bucket)->isAsset()) {
-                    $owedToUs = $owedToUs->plus($amount);
-                } else {
-                    $owedToThem = $owedToThem->plus($amount);
-                }
-            }
-
-            $totals[] = new ClientTotal($party->id, $party->name, $owedToUs, $owedToThem);
+            // One balance, reported on whichever side its sign puts it. ClientTotal
+            // keeps the two apart rather than netting them, which across a list of
+            // clients is the difference between "I am owed 400,000 and holding
+            // 900,000" and a single meaningless number.
+            $totals[] = new ClientTotal(
+                $party->id,
+                $party->name,
+                $balance->isPositive() ? $balance : Money::zero($spec),
+                $balance->isNegative() ? $balance->absolute() : Money::zero($spec),
+            );
         }
 
         usort($totals, fn (ClientTotal $a, ClientTotal $b): int => $b->magnitude()->compareTo($a->magnitude()));
@@ -481,8 +471,8 @@ final class DashboardQuery
     /**
      * Narrow the list to one status.
      *
-     * In PHP rather than SQL: a status is a reading of four positions, not a column,
-     * so there is nothing to put in a WHERE clause.
+     * In PHP rather than SQL: a status is a reading across every currency a party
+     * trades in, not a column, so there is nothing to put in a WHERE clause.
      *
      * @param  list<CounterpartyPosition>  $parties
      * @return list<CounterpartyPosition>
@@ -497,18 +487,6 @@ final class DashboardQuery
             $parties,
             fn (CounterpartyPosition $party): bool => $party->status === $status,
         ));
-    }
-
-    /** @param array<string, Money> $buckets */
-    private function holds(array $buckets, BalanceBucket ...$wanted): bool
-    {
-        foreach ($wanted as $bucket) {
-            if (isset($buckets[$bucket->value]) && ! $buckets[$bucket->value]->isZero()) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /** Counterparty-owned ledger accounts, narrowed by whichever filters apply. */

@@ -6,17 +6,17 @@ namespace App\Models;
 
 use App\Casts\MoneyCast;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One declared opening position: a party, a bucket, a currency, an amount.
+ * Where a party stood before the books began: one signed figure per currency.
+ *
+ * Positive means they owed us; negative means we were holding theirs.
  *
  * @property int $id
  * @property int $counterparty_id
  * @property int $currency_id
- * @property BalanceBucket $bucket
  * @property Money|null $amount
  * @property Money|null $posted_amount how much of it has reached the ledger
  */
@@ -27,7 +27,6 @@ final class CounterpartyOpeningBalance extends Model
     protected $fillable = [
         'counterparty_id',
         'currency_id',
-        'bucket',
         'amount',
         'posted_amount',
     ];
@@ -36,7 +35,6 @@ final class CounterpartyOpeningBalance extends Model
     protected function casts(): array
     {
         return [
-            'bucket' => BalanceBucket::class,
             'amount' => MoneyCast::class.':currency_id',
             'posted_amount' => MoneyCast::class.':currency_id',
         ];

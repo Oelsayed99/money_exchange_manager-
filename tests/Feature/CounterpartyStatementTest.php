@@ -8,7 +8,6 @@ use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Statement\StatementBuilder;
-use App\Enums\BalanceBucket;
 use App\Enums\Role;
 use App\Enums\StatementMode;
 use App\Enums\TransactionType;
@@ -47,7 +46,7 @@ function creditIn(string $amount, string $date = '2026-06-01'): void
     $test = test();
 
     $test->posting->post($test->rules->build(new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $test->egp,
         amount: $test->egp->money($amount),
         occurredAt: new DateTimeImmutable($date),
@@ -62,7 +61,7 @@ function creditOut(string $amount, string $date = '2026-06-16'): void
     $test = test();
 
     $test->posting->post($test->rules->build(new TransactionInput(
-        type: TransactionType::CreditSettlement,
+        type: TransactionType::Out,
         currency: $test->egp,
         amount: $test->egp->money($amount),
         occurredAt: new DateTimeImmutable($date),
@@ -139,7 +138,7 @@ describe('positions are kept apart', function (): void {
 
         // They also took money against a receivable.
         $this->posting->post($this->rules->build(new TransactionInput(
-            type: TransactionType::LoanGiven,
+            type: TransactionType::Out,
             currency: $this->egp,
             amount: $this->egp->money('400000'),
             occurredAt: new DateTimeImmutable('2026-06-05'),
@@ -219,7 +218,7 @@ describe('the period', function (): void {
 describe('me mode and client mode', function (): void {
     beforeEach(function (): void {
         $this->posting->post($this->rules->build(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money('500000'),
             occurredAt: new DateTimeImmutable('2026-06-01'),

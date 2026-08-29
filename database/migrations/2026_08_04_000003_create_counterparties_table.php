@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +65,7 @@ return new class extends Migration
         // unrecognised bucket would be a position nobody reports on.
         DB::statement(sprintf(
             "ALTER TABLE counterparty_opening_balances ADD CONSTRAINT chk_counterparty_bucket CHECK (bucket IN ('%s'))",
-            implode("','", BalanceBucket::values()),
+            implode("','", ['custody', 'receivable', 'payable', 'credit_trust']),
         ));
 
         // Deferred from Step 2.1 so the column arrives with its foreign key rather than

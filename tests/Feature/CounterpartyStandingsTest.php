@@ -72,8 +72,8 @@ function standingRow(Counterparty $party): array
 it('adds the buckets on one side together', function (): void {
     // Their money with us, arriving two different ways: money left on deposit, and
     // money we borrowed. Both are ours to give back.
-    postToBucket(TransactionType::CreditDeposit, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::LoanReceived, $this->client, $this->egp, '100490', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '100490', $this->safe);
 
     $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
 
@@ -84,8 +84,8 @@ it('adds the buckets on one side together', function (): void {
 // The line that must not move. A party owing us and holding our money is two facts,
 // and one number cannot carry both.
 it('never adds the two sides together', function (): void {
-    postToBucket(TransactionType::CreditDeposit, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::LoanGiven, $this->client, $this->egp, '14890', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
+    postToBucket(TransactionType::Out, $this->client, $this->egp, '14890', $this->safe);
 
     $row = standingRow($this->client);
     $standing = collect($row['standings'])->firstWhere('code', 'EGP');
@@ -101,8 +101,8 @@ it('never adds the two sides together', function (): void {
 });
 
 it('keeps the four buckets available for the drill-down', function (): void {
-    postToBucket(TransactionType::CreditDeposit, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::LoanGiven, $this->client, $this->egp, '14890', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
+    postToBucket(TransactionType::Out, $this->client, $this->egp, '14890', $this->safe);
 
     $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
 
@@ -113,8 +113,8 @@ it('keeps the four buckets available for the drill-down', function (): void {
 });
 
 it('reports each currency on its own', function (): void {
-    postToBucket(TransactionType::CreditDeposit, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::LoanGiven, $this->client, $this->usd, '2000', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
+    postToBucket(TransactionType::Out, $this->client, $this->usd, '2000', $this->safe);
 
     $standings = collect(standingRow($this->client)['standings'])->keyBy('code');
 
@@ -124,7 +124,7 @@ it('reports each currency on its own', function (): void {
 });
 
 it('sends every figure as a string, never a JSON number', function (): void {
-    postToBucket(TransactionType::CreditDeposit, $this->client, $this->egp, '899510.25', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '899510.25', $this->safe);
 
     $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
 
@@ -149,7 +149,7 @@ it('reads the ledger, not the declared openings', function (): void {
 it('asks the ledger once however many parties there are', function (): void {
     foreach (range(1, 6) as $n) {
         $party = Counterparty::factory()->create(['name' => "Party {$n}"]);
-        postToBucket(TransactionType::CreditDeposit, $party, $this->egp, '1000', $this->safe);
+        postToBucket(TransactionType::In, $party, $this->egp, '1000', $this->safe);
     }
 
     DB::enableQueryLog();

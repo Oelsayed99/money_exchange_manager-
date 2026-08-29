@@ -48,13 +48,14 @@ final readonly class CounterpartyStandings
             ])
             ->get();
 
-        /** @var array<int, array<string, array<string, Money>>> $byParty */
+        /** @var array<int, list<CounterpartyStanding>> $standings */
+        $standings = [];
+
+        /** @var array<int, array<string, Money>> $byParty */
         $byParty = [];
 
         foreach ($rows as $row) {
-            $bucket = LedgerAccountSubkind::from((string) $row->subkind)->bucket();
-
-            if ($bucket === null) {
+            if (! LedgerAccountSubkind::from((string) $row->subkind)->isCounterpartyPosition()) {
                 continue;
             }
 
@@ -67,22 +68,14 @@ final readonly class CounterpartyStandings
                 continue;
             }
 
-            $byParty[(int) $row->owner_id][$spec->code][$bucket->value] = $amount;
+            $byParty[(int) $row->owner_id][$spec->code] = $amount;
         }
-
-        $standings = [];
 
         foreach ($byParty as $id => $currencies) {
             ksort($currencies);
 
-            $standings[$id] = [];
-
-            foreach ($currencies as $code => $buckets) {
-                $standings[$id][] = CounterpartyStanding::of(
-                    $code,
-                    $buckets,
-                    Money::zero($this->currencies->byCode($code)),
-                );
+            foreach ($currencies as $code => $balance) {
+                $standings[$id][] = new CounterpartyStanding($code, $balance);
             }
         }
 
