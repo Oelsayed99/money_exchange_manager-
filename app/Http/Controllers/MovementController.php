@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Ledger\BucketEffect;
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
@@ -75,6 +76,7 @@ final class MovementController extends Controller
 
         $after = null;
         $warning = null;
+        $instead = null;
 
         if ($effect !== null && isset($validated['amount']) && $validated['amount'] !== '') {
             $amount = $currency->money((string) $validated['amount']);
@@ -94,6 +96,7 @@ final class MovementController extends Controller
             // person at the counter is better placed to make than this code is.
             if ($result->isNegative()) {
                 $warning = $effect->bucket->value;
+                $instead = $this->reachesTheMoney($effect, $current);
             }
         }
 
@@ -101,6 +104,7 @@ final class MovementController extends Controller
             'positions' => array_map(fn (Money $m): array => $m->jsonSerialize(), $current),
             'after' => $after,
             'negative_warning' => $warning,
+            'instead' => $instead,
         ]);
     }
 
@@ -111,6 +115,48 @@ final class MovementController extends Controller
         $this->posting->post($this->rules->build($request->toTransactionInput()));
 
         return to_route('movements.create')->with('success', __('movements.recorded'));
+    }
+
+    /**
+     * The movement that would have found the money, when this one is about to miss it.
+     *
+     * Paying a client out of the credit they left with you is a credit settlement, not
+     * a payment against a payable — different positions, on purpose. Choose the wrong
+     * one and the payable goes below zero while the credit sits untouched, which is
+     * exactly what the warning is about; naming the position that actually holds the
+     * money is what turns "this looks wrong" into "here is what you meant".
+     *
+     * Only ever the same side of the relationship. Money we owe is not money they owe,
+     * and suggesting one for the other would be worse than saying nothing.
+     *
+     * @param  array<string, Money>  $current
+     * @return array{bucket: string, bucket_label: string, amount: array{amount: string, currency: string}, type: string, type_label: string}|null
+     */
+    private function reachesTheMoney(BucketEffect $effect, array $current): ?array
+    {
+        foreach ($current as $value => $amount) {
+            $bucket = BalanceBucket::from($value);
+
+            if ($bucket === $effect->bucket || $bucket->isAsset() !== $effect->bucket->isAsset() || ! $amount->isPositive()) {
+                continue;
+            }
+
+            foreach (TransactionType::cases() as $type) {
+                $other = $type->bucketEffect();
+
+                if ($type->recordableByHand() && $other?->bucket === $bucket && $other->increases === $effect->increases) {
+                    return [
+                        'bucket' => $bucket->value,
+                        'bucket_label' => $bucket->label(),
+                        'amount' => $amount->jsonSerialize(),
+                        'type' => $type->value,
+                        'type_label' => $type->label(),
+                    ];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

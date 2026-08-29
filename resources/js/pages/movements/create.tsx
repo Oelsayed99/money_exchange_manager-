@@ -40,6 +40,14 @@ interface Positions {
     after: { bucket: string; amount: MoneyPayload; increases: boolean } | null;
     /** The bucket that would go below zero, or null. A warning, never a block. */
     negative_warning: string | null;
+    /** A position on the same side that does hold money, and how to reach it. */
+    instead: {
+        bucket: string;
+        bucket_label: string;
+        amount: MoneyPayload;
+        type: string;
+        type_label: string;
+    } | null;
 }
 
 type MovementForm = {
@@ -329,6 +337,29 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                                             {t('movements.negative')}
                                         </div>
                                         <p className="text-xs text-amber-800 dark:text-amber-300">{t('movements.negative_body')}</p>
+
+                                        {/* The likeliest reason a position is about to go
+                                            below zero is that the money is sitting in the
+                                            other one. Naming it turns a warning into an
+                                            answer — and the button is the answer. */}
+                                        {state.instead !== null && (
+                                            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-amber-800 dark:text-amber-300">
+                                                <span>
+                                                    {t('movements.instead', {
+                                                        bucket: state.instead.bucket_label,
+                                                        amount: `${state.instead.amount.amount} ${state.instead.amount.currency}`,
+                                                    })}
+                                                </span>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setData('type', state.instead?.type ?? data.type)}
+                                                >
+                                                    {t('movements.use_instead', { type: state.instead.type_label })}
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </>

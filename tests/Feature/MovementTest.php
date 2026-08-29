@@ -260,6 +260,59 @@ describe('the negative credit warning', function (): void {
             ->assertJsonPath('after.amount.amount', '-50000.00');
     });
 
+    /*
+     * The mistake this was built for.
+     *
+     * A client leaves 400,000 with you. You pay them 100,000 and reach for "money
+     * paid" — which settles a *payable*, a debt from trade, and does not touch the
+     * credit at all. The payable goes to -100,000 and the 400,000 sits there untouched,
+     * which is correct and looks like a bug to whoever typed it.
+     *
+     * Naming the position that actually holds the money is what turns the warning into
+     * an answer.
+     */
+    it('names the position that does hold the money, and how to reach it', function (): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '400000']));
+
+        $this->actingAs($this->operator)->postJson('/movements/positions', [
+            'counterparty_id' => $this->party->id,
+            'currency_id' => $this->egp->id,
+            'type' => 'money_paid',
+            'amount' => '100000',
+        ])->assertJsonPath('negative_warning', 'payable')
+            ->assertJsonPath('instead.bucket', 'credit_trust')
+            ->assertJsonPath('instead.amount.amount', '400000.00')
+            ->assertJsonPath('instead.type', 'credit_settlement');
+    });
+
+    // Money we owe is not money they owe. Suggesting one for the other would be worse
+    // than saying nothing at all.
+    it('never points across the two sides', function (): void {
+        // They owe us 50,000; nothing of theirs is in our hands.
+        $this->actingAs($this->operator)->post('/movements', movementPayload([
+            'type' => 'loan_given',
+            'amount' => '50000',
+        ]));
+
+        $this->actingAs($this->operator)->postJson('/movements/positions', [
+            'counterparty_id' => $this->party->id,
+            'currency_id' => $this->egp->id,
+            'type' => 'credit_settlement',
+            'amount' => '10000',
+        ])->assertJsonPath('negative_warning', 'credit_trust')
+            ->assertJsonPath('instead', null);
+    });
+
+    it('says nothing when there is no other position to point at', function (): void {
+        $this->actingAs($this->operator)->postJson('/movements/positions', [
+            'counterparty_id' => $this->party->id,
+            'currency_id' => $this->egp->id,
+            'type' => 'money_paid',
+            'amount' => '100000',
+        ])->assertJsonPath('negative_warning', 'payable')
+            ->assertJsonPath('instead', null);
+    });
+
     it('stays quiet when the balance covers it', function (): void {
         $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '500000']));
 

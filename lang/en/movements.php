@@ -30,5 +30,7 @@ return [
     'pick_counterparty' => 'Choose a counterparty to see where they stand.',
 
     'negative' => 'This takes the balance below zero',
-    'negative_body' => 'Paying out more than they left with you means they now owe you. This is allowed and will be recorded as a negative credit — but a loan given may be what you actually mean.',
+    'negative_body' => 'Taking a position below zero means the relationship has turned over — they now owe you what you were holding, or the other way about. It is allowed and will be recorded as it stands.',
+    'instead' => 'This client has :amount in :bucket, which this movement does not touch.',
+    'use_instead' => 'Use :type',
 ];
