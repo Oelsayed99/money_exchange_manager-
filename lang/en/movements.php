@@ -3,6 +3,14 @@
 declare(strict_types=1);
 
 return [
+    'balance_now' => 'Balance now',
+    'turns_over' => 'This turns the relationship over',
+    'turns_over_body' => 'They were holding money of ours and will now owe us, or the other way about. Allowed, and recorded as it stands.',
+    'convert_hint' => 'Leave this alone unless the money that changed hands was in a different currency from the one above. Enter what actually moved and the rate you agreed; both are kept.',
+    'cash_amount' => 'Actually moved',
+    'cash_currency' => 'In currency',
+    'same_currency' => 'Same currency',
+    'rate' => 'Rate',
     'title' => 'Record a movement',
     'description' => 'Credit in and out, lending and borrowing, settlements, transfers, fees and expenses.',
 

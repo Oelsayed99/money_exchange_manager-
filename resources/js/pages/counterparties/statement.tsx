@@ -17,10 +17,12 @@ interface Row {
     occurred_at: string;
     reference: string | null;
     description: string | null;
-    bucket: string;
     in: MoneyPayload | null;
     out: MoneyPayload | null;
     balance_after: MoneyPayload;
+    /** What actually changed hands, when it was not this statement's currency. */
+    moved: MoneyPayload | null;
+    rate: string | null;
     profit: MoneyPayload | null;
 }
 
@@ -29,15 +31,16 @@ interface Statement {
     decimal_places: number;
     mode: string;
     shows_profit: boolean;
-    buckets: string[];
     rows: Row[];
-    opening: Record<string, MoneyPayload>;
-    closing: Record<string, MoneyPayload>;
-    total_in: Record<string, MoneyPayload>;
-    total_out: Record<string, MoneyPayload>;
+    opening: MoneyPayload;
+    closing: MoneyPayload;
+    total_in: MoneyPayload;
+    total_out: MoneyPayload;
+    /** Which way the closing balance runs, said rather than left to a minus sign. */
+    they_owe_us: boolean;
     /** Null in client mode — the figures were never queried, not merely hidden. */
     profit: Record<string, MoneyPayload> | null;
-    declared_opening: Record<string, MoneyPayload>;
+    declared_opening: MoneyPayload | null;
 }
 
 interface Props {
@@ -46,13 +49,12 @@ interface Props {
     statement: Statement | null;
     filters: { currency: string | null; mode: string; from: string | null; to: string | null };
     modes: { value: string; label: string }[];
-    bucketLabels: Record<string, { label: string; position: string }>;
 }
 
 const selectClass =
     'border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';
 
-export default function CounterpartyStatement({ counterparty, currencies, statement, filters, modes, bucketLabels }: Props) {
+export default function CounterpartyStatement({ counterparty, currencies, statement, filters, modes }: Props) {
     const { t } = useTranslations();
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -191,28 +193,20 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                             {internal ? t('statements.mode_hint_internal') : t('statements.mode_hint_client')}
                         </p>
 
-                        {Object.keys(statement.declared_opening).length > 0 && (
+                        {statement.declared_opening !== null && (
                             <div className="space-y-1 rounded-lg border border-amber-600/40 bg-amber-600/10 p-3">
                                 <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
                                     <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
                                     {t('statements.declared_opening')}
                                 </div>
                                 <p className="text-xs text-amber-800 dark:text-amber-300">{t('statements.declared_opening_body')}</p>
-                                <ul className="text-xs text-amber-800 dark:text-amber-300">
-                                    {Object.entries(statement.declared_opening).map(([bucket, amount]) => (
-                                        <li key={bucket} className="flex items-center gap-2">
-                                            <span>{bucketLabels[bucket]?.label ?? bucket}</span>
-                                            <MoneyDisplay {...amount} />
-                                        </li>
-                                    ))}
-                                </ul>
+                                <div className="text-xs text-amber-800 dark:text-amber-300">
+                                    {statement.declared_opening && <MoneyDisplay {...statement.declared_opening} signed />}
+                                </div>
                             </div>
                         )}
 
-                        {/* The closing position, stated rather than signed. This is the
-                            answer to "where do we stand", and it is deliberately one
-                            labelled figure per bucket instead of one net number. */}
-                        <Positions statement={statement} bucketLabels={bucketLabels} label={t('statements.closing')} balances={statement.closing} />
+                        <ClosingBalance statement={statement} />
 
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full min-w-3xl text-sm">
@@ -251,7 +245,7 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                                     )}
 
                                     {statement.rows.map((row, index) => (
-                                        <tr key={`${row.transaction_id}-${row.bucket}-${index}`} className="border-t">
+                                        <tr key={`${row.transaction_id}-${index}`} className="border-t">
                                             <td className="p-2 whitespace-nowrap tabular-nums" dir="ltr">
                                                 {row.occurred_at}
                                             </td>
@@ -266,13 +260,17 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                                             <td className="p-2 text-end">{row.in && <MoneyDisplay {...row.in} />}</td>
                                             <td className="p-2 text-end">{row.out && <MoneyDisplay {...row.out} />}</td>
                                             <td className="p-2 text-end">
-                                                <MoneyDisplay {...row.balance_after} />
-                                                {/* Which position this line moved. Without it
-                                                    the column would be the sheet's ambiguous
-                                                    running total all over again. */}
-                                                <div className="text-muted-foreground text-xs">
-                                                    {bucketLabels[row.bucket]?.position ?? row.bucket}
-                                                </div>
+                                                <MoneyDisplay {...row.balance_after} signed />
+                                                {/* What actually changed hands, when the line
+                                                    was booked in another currency. */}
+                                                {row.moved && (
+                                                    <div className="text-muted-foreground text-xs" dir="ltr">
+                                                        {t('statements.moved_as', {
+                                                            amount: `${row.moved.amount} ${row.moved.currency}`,
+                                                            rate: row.rate ?? '—',
+                                                        })}
+                                                    </div>
+                                                )}
                                             </td>
                                             {internal && <td className="p-2 text-end">{row.profit && <MoneyDisplay {...row.profit} signed />}</td>}
                                         </tr>
@@ -281,23 +279,21 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
 
                                 {statement.rows.length > 0 && (
                                     <tfoot className="bg-muted/30 border-t font-medium">
-                                        {statement.buckets.map((bucket) => {
-                                            const totalIn = statement.total_in[bucket];
-                                            const totalOut = statement.total_out[bucket];
-                                            const closing = statement.closing[bucket];
-
-                                            return (
-                                                <tr key={bucket}>
-                                                    <td className="p-2" colSpan={2}>
-                                                        {bucketLabels[bucket]?.label ?? bucket}
-                                                    </td>
-                                                    <td className="p-2 text-end">{totalIn && <MoneyDisplay {...totalIn} />}</td>
-                                                    <td className="p-2 text-end">{totalOut && <MoneyDisplay {...totalOut} />}</td>
-                                                    <td className="p-2 text-end">{closing && <MoneyDisplay {...closing} />}</td>
-                                                    {internal && <td />}
-                                                </tr>
-                                            );
-                                        })}
+                                        <tr>
+                                            <td className="p-2" colSpan={2}>
+                                                {t('statements.totals')}
+                                            </td>
+                                            <td className="p-2 text-end">
+                                                <MoneyDisplay {...statement.total_in} />
+                                            </td>
+                                            <td className="p-2 text-end">
+                                                <MoneyDisplay {...statement.total_out} />
+                                            </td>
+                                            <td className="p-2 text-end">
+                                                <MoneyDisplay {...statement.closing} signed />
+                                            </td>
+                                            {internal && <td />}
+                                        </tr>
                                     </tfoot>
                                 )}
                             </table>
@@ -321,43 +317,31 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
 }
 
 /**
- * The closing position, one labelled figure per bucket.
+ * Where the two of you stand, said in words as well as figures.
  *
- * Never summed. A party can hold our money and owe us money at the same time, and the
- * total of those two is a number that describes nothing anybody can act on.
+ * One signed number now, where there were four labelled ones. A minus sign is the
+ * easiest thing on a screen to misread, so the sentence carries the meaning and the
+ * figure is printed without its sign. See ADR 0032.
  */
-function Positions({
-    statement,
-    bucketLabels,
-    label,
-    balances,
-}: {
-    statement: Statement;
-    bucketLabels: Record<string, { label: string; position: string }>;
-    label: string;
-    balances: Record<string, MoneyPayload>;
-}) {
+function ClosingBalance({ statement }: { statement: Statement }) {
     const { t } = useTranslations();
 
-    const live = statement.buckets
-        .map((bucket) => ({ bucket, amount: balances[bucket] }))
-        .filter((entry): entry is { bucket: string; amount: MoneyPayload } => entry.amount !== undefined && !isZero(entry.amount.amount));
-
-    if (live.length === 0) {
-        return <p className="rounded-lg border p-4 text-sm">{t('statements.settled')}</p>;
+    if (isZero(statement.closing.amount)) {
+        return <p className="rounded-lg border p-4 text-sm">{t('statements.settled_now')}</p>;
     }
 
+    const theyOweUs = statement.they_owe_us;
+    const magnitude = { ...statement.closing, amount: statement.closing.amount.replace('-', '') };
+
     return (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {live.map(({ bucket, amount }) => (
-                <div key={bucket} className="rounded-lg border p-4">
-                    <div className="text-muted-foreground text-xs">{label}</div>
-                    <div className="text-sm">{bucketLabels[bucket]?.position ?? bucket}</div>
-                    <div className="mt-1 text-lg">
-                        <MoneyDisplay {...amount} />
-                    </div>
-                </div>
-            ))}
+        <div className={'rounded-lg border-s-4 p-4 ' + (theyOweUs ? 'border-s-green-600 bg-green-600/5' : 'border-s-red-600 bg-red-600/5')}>
+            <div className="text-muted-foreground text-xs">{t('statements.closing')}</div>
+            <div className="mt-1 text-lg">
+                <MoneyDisplay {...magnitude} />
+            </div>
+            <div className={'text-sm ' + (theyOweUs ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>
+                {theyOweUs ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
+            </div>
         </div>
     );
 }
