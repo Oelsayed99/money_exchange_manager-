@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
+use App\Domain\Money\Decimal;
 use App\Enums\Role;
 use App\Models\Account;
 use App\Models\Counterparty;
@@ -172,8 +173,42 @@ describe('recording', function (): void {
         $transaction = Transaction::query()->sole();
 
         expect($transaction->legs)->toHaveCount(2)
-            ->and($transaction->legs->pluck('currency_id')->all())->toBe([$usd->id, $this->egp->id]);
+            ->and($transaction->legs->pluck('currency_id')->all())->toBe([$usd->id, $this->egp->id])
+            // The rate itself. This assertion was missing while the name of the test
+            // promised it, and the rate was being dropped entirely — until a browser
+            // test read "10,000.00 USD at —" off a statement.
+            //
+            // Trimmed, because the column pads to twelve places: what is asserted is
+            // that the number the operator typed comes back, not how wide the column is.
+            ->and(Decimal::trimTrailingZeros((string) $transaction->customer_rate))->toBe('50.85');
     });
+
+    it('leaves the rate off a movement that did not convert', function (): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '1000']));
+
+        expect(Transaction::query()->sole()->customer_rate)->toBeNull();
+    });
+
+    // `string` alone let anything through to be stored as the rate of record and
+    // printed on a statement a client is handed.
+    it('refuses a cash amount or a rate that is not a positive number', function (string $field, string $value): void {
+        $usd = Currency::query()->where('code', 'USD')->sole();
+
+        $this->actingAs($this->operator)->post('/movements', movementPayload([
+            'amount' => '508500',
+            'cash_currency_id' => $usd->id,
+            'cash_amount' => '10000',
+            'rate' => '50.85',
+            $field => $value,
+        ]))->assertSessionHasErrors($field);
+    })->with([
+        ['cash_amount', 'abc'],
+        ['cash_amount', '0'],
+        ['cash_amount', '-10000'],
+        ['rate', 'fifty'],
+        ['rate', '0'],
+        ['rate', '-50.85'],
+    ]);
 
     it('refuses a conversion on a movement that is not a client movement', function (): void {
         $usd = Currency::query()->where('code', 'USD')->sole();

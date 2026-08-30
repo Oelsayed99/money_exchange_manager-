@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Statement;
 
 use App\Domain\Money\CurrencyRegistry;
+use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerOwnerType;
@@ -141,7 +142,12 @@ final class StatementBuilder
     {
         foreach ($transaction->legs as $leg) {
             if ($leg->currency_id !== $currency->getKey()) {
-                return [$leg->amount, $transaction->customer_rate];
+                return [
+                    $leg->amount,
+                    $transaction->customer_rate === null
+                        ? null
+                        : Decimal::trimTrailingZeros($transaction->customer_rate),
+                ];
             }
         }
 

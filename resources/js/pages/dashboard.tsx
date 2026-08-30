@@ -19,7 +19,8 @@ interface PartyRow {
     name: string;
     status: string;
     status_by_currency: Record<string, string>;
-    positions: Record<string, ByCurrency>;
+    /** Currency code to one signed balance. Positive means they owe us. */
+    positions: ByCurrency;
 }
 
 interface DashboardData {
@@ -60,7 +61,6 @@ interface Props {
         counterparties: { id: number; name: string }[];
         currencies: { code: string }[];
         statuses: { value: string; label: string }[];
-        buckets: { value: string; label: string }[];
     };
 }
 
@@ -76,7 +76,6 @@ export default function Dashboard({ dashboard, rates, filters, options }: Props)
         router.get('/dashboard', clean({ ...filters, ...changes }), { preserveState: true, preserveScroll: true });
 
     const filtered = Object.values(filters).some((value) => value !== null && value !== '');
-    const bucketLabel = (bucket: string) => options.buckets.find((b) => b.value === bucket)?.label ?? bucket;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -221,7 +220,7 @@ export default function Dashboard({ dashboard, rates, filters, options }: Props)
                                                 {t('dashboard.parties.status')}
                                             </th>
                                             <th scope="col" className="p-2 text-start font-medium">
-                                                {t('dashboard.parties.positions')}
+                                                {t('dashboard.parties.balance')}
                                             </th>
                                             <th scope="col" className="p-2" />
                                         </tr>
@@ -242,18 +241,7 @@ export default function Dashboard({ dashboard, rates, filters, options }: Props)
                                                     <StatusBadge status={party.status} label={t(`dashboard.statuses.${party.status}`)} />
                                                 </td>
                                                 <td className="p-2">
-                                                    {/* Per currency, per bucket, each labelled. Never one
-                                                        combined figure — see ADR 0007. */}
-                                                    <div className="space-y-1">
-                                                        {Object.entries(party.positions).map(([code, buckets]) =>
-                                                            Object.entries(buckets).map(([bucket, amount]) => (
-                                                                <div key={`${code}-${bucket}`} className="flex flex-wrap items-baseline gap-2">
-                                                                    <MoneyDisplay {...amount} />
-                                                                    <span className="text-muted-foreground text-xs">{bucketLabel(bucket)}</span>
-                                                                </div>
-                                                            )),
-                                                        )}
-                                                    </div>
+                                                    <PartyBalance party={party} />
                                                 </td>
                                                 <td className="p-2 text-end">
                                                     <Button variant="ghost" size="sm" asChild>
@@ -273,6 +261,44 @@ export default function Dashboard({ dashboard, rates, filters, options }: Props)
                 )}
             </div>
         </AppLayout>
+    );
+}
+
+/**
+ * Where one client stands, per currency — the same one signed figure the client list
+ * shows, and worded the same way.
+ *
+ * Currencies are never added together: a client owing dollars and holding pounds has
+ * two balances, and the only honest summary of that is the status badge beside them.
+ */
+function PartyBalance({ party }: { party: PartyRow }) {
+    const { t } = useTranslations();
+
+    const carrying = Object.entries(party.positions).filter(([, money]) => Number(money.amount) !== 0);
+
+    if (carrying.length === 0) {
+        return <span className="text-muted-foreground">{t('counterparties.settled')}</span>;
+    }
+
+    return (
+        <div className="space-y-1">
+            {carrying.map(([code, money]) => {
+                const theyOweUs = Number(money.amount) > 0;
+
+                return (
+                    <div key={code} className="flex flex-wrap items-baseline gap-2">
+                        <MoneyDisplay {...money} signed />
+                        <span
+                            className={
+                                'text-xs ' + (theyOweUs ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')
+                            }
+                        >
+                            {theyOweUs ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
     );
 }
 

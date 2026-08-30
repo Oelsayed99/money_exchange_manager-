@@ -1,4 +1,5 @@
 import { MoneyDisplay } from '@/components/money-display';
+import { groupDigits } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -266,7 +267,7 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                                                 {row.moved && (
                                                     <div className="text-muted-foreground text-xs" dir="ltr">
                                                         {t('statements.moved_as', {
-                                                            amount: `${row.moved.amount} ${row.moved.currency}`,
+                                                            amount: `${groupDigits(row.moved.amount)} ${row.moved.currency}`,
                                                             rate: row.rate ?? '—',
                                                         })}
                                                     </div>

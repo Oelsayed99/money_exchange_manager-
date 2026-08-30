@@ -34,6 +34,9 @@ final class MovementRequest extends FormRequest
         return Gate::allows('create', Transaction::class);
     }
 
+    /** Rates carry more places than money does — the same twelve the exchange screen allows. */
+    private const int RATE_SCALE = 12;
+
     /** @return array<string, list<mixed>|string> */
     public function rules(): array
     {
@@ -83,7 +86,7 @@ final class MovementRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['destination_account_id', 'counterparty_id', 'bucket', 'method'] as $field) {
+        foreach (['destination_account_id', 'counterparty_id', 'method'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
             }
@@ -112,6 +115,34 @@ final class MovementRequest extends FormRequest
             // movement in the other direction under a name that hides it.
             if (bccomp($amount, '0', Decimal::WORKING_SCALE) <= 0) {
                 $validator->errors()->add('amount', __('movements.amount_positive'));
+            }
+
+            // The cash side, when there is one. `string` alone would let "abc" through
+            // to be stored as the rate of record and printed on a client's statement.
+            if ($this->input('cash_currency_id') === null || $this->input('cash_currency_id') === '') {
+                return;
+            }
+
+            foreach (['cash_amount' => Money::SCALE, 'rate' => self::RATE_SCALE] as $field => $scale) {
+                $value = $this->input($field);
+                $label = __('movements.'.($field === 'rate' ? 'rate' : 'cash_amount'));
+
+                if (! is_string($value) || ! Decimal::isValid($value)) {
+                    $validator->errors()->add($field, __('validation.numeric', ['attribute' => $label]));
+
+                    continue;
+                }
+
+                if (Decimal::scaleOf($value) > $scale) {
+                    $validator->errors()->add($field, __('validation.max.numeric', [
+                        'attribute' => $label,
+                        'max' => $scale,
+                    ]));
+                }
+
+                if (bccomp($value, '0', Decimal::WORKING_SCALE) <= 0) {
+                    $validator->errors()->add($field, __('movements.amount_positive'));
+                }
             }
         });
     }

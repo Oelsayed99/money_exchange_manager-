@@ -44,7 +44,7 @@ test('turns the whole interface over, sidebar included', async ({ page }) => {
 });
 
 test('keeps the filters you had applied', async ({ page }) => {
-    await page.goto('/transactions?type=credit_deposit');
+    await page.goto('/transactions?type=in');
 
     const before = await page.getByRole('row').count();
     expect(before).toBeGreaterThan(1);
@@ -52,7 +52,7 @@ test('keeps the filters you had applied', async ({ page }) => {
     await switchTo(page, 'ar');
 
     // Same page, same query string, same rows — in Arabic.
-    await expect(page).toHaveURL(/type=credit_deposit/);
+    await expect(page).toHaveURL(/type=in/);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // A retrying assertion, not a bare count(). The page component now survives the
     // switch instead of being rebuilt, so the rows are re-rendered rather than
@@ -60,7 +60,7 @@ test('keeps the filters you had applied', async ({ page }) => {
     // mid-update. What is being asserted is unchanged.
     await expect(page.getByRole('row')).toHaveCount(before);
 
-    await expect(page.getByRole('combobox').first()).toHaveValue('credit_deposit');
+    await expect(page.getByRole('combobox').first()).toHaveValue('in');
 });
 
 test('answers an Arabic operator in Arabic when they get something wrong', async ({ page }) => {

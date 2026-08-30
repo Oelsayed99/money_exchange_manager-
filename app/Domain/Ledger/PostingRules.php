@@ -68,6 +68,12 @@ final class PostingRules
             description: $input->description,
             idempotencyKey: $input->idempotencyKey,
             status: $input->status,
+            // The rate a converted movement was agreed at. Both amounts are already in
+            // the entries; without this the statement can say what moved but not what
+            // it was turned at, which is half of the detail the operator typed.
+            attributes: $input->converts() && $input->rate !== null
+                ? ['customer_rate' => $input->rate]
+                : [],
         );
     }
 

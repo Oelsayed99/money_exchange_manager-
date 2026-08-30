@@ -31,9 +31,8 @@ return [
         'other' => 'Other',
     ],
 
-    // The list shows one figure a side. The four buckets are still what the ledger
-    // holds and what the statement shows; these name the two sides in the plainest
-    // words there are for them.
+    // One figure per currency, and its sign is the whole of what the four columns
+    // here used to say. These name the two directions in the plainest words there are.
     'opening_hint' => 'Where the relationship stood before you started recording — one figure per currency. Positive means they owed you; negative means you were holding money of theirs. Saving writes it to the ledger, dated today.',
     'opening_positions' => 'Opening balance',
     'balance' => 'Balance',

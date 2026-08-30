@@ -67,9 +67,9 @@ export default function CounterpartiesIndex({ counterparties }: { counterparties
                 <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border">
                     <table className="w-full min-w-[56rem] border-collapse text-sm">
                         <thead className="bg-muted/50 sticky top-0">
-                            {/* Two columns, not four. Which side the money is on is the
-                                question a list answers; which bucket it sits in is the
-                                question the statement answers. */}
+                            {/* One column. Which way the money runs is the question a
+                                list answers; the movements behind it are the question
+                                the statement answers. */}
                             <tr className="text-muted-foreground">
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('counterparties.fields.name')}

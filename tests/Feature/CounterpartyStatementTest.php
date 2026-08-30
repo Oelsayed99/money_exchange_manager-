@@ -110,6 +110,42 @@ describe('the sheet it replaces', function (): void {
             ->and($statement->closing->toDisplayString())->toBe('-817540.00');
     });
 
+    /*
+     * The line the owner asked for: booked in pounds, arrived in dollars.
+     *
+     * The statement carries the client's figure in the column and what actually
+     * changed hands beneath it — both amounts and the rate they were agreed at.
+     */
+    it('says what actually moved, and at what rate', function (): void {
+        test()->posting->post(test()->rules->build(new TransactionInput(
+            type: TransactionType::In,
+            currency: test()->egp,
+            amount: test()->egp->money('508500'),
+            occurredAt: new DateTimeImmutable('2026-06-01'),
+            account: test()->safe,
+            counterparty: test()->party,
+            cashCurrency: test()->usd,
+            cashAmount: test()->usd->money('10000'),
+            rate: '50.85',
+        )));
+
+        $row = statementFor()->rows[0];
+
+        expect($row->movedAmount?->toDisplayString())->toBe('10000.00')
+            ->and($row->movedAmount?->currency->code)->toBe('USD')
+            // Not '50.850000000000'. The column pads; a statement should not.
+            ->and($row->rate)->toBe('50.85');
+    });
+
+    it('leaves both off a line that moved in the currency it was booked in', function (): void {
+        creditIn('899510');
+
+        $row = statementFor()->rows[0];
+
+        expect($row->movedAmount)->toBeNull()
+            ->and($row->rate)->toBeNull();
+    });
+
     it('totals what came in and what went out separately', function (): void {
         creditIn('581000');
         creditIn('436540');

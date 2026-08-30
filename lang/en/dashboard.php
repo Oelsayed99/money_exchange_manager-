@@ -17,15 +17,15 @@ return [
      */
     'statuses' => [
         'owes_us' => 'They owe us',
-        'has_credit' => 'They have credit',
-        'mixed' => 'Both',
+        'has_credit' => 'We owe them',
+        'mixed' => 'Both ways',
         'settled' => 'Settled',
     ],
     'status_hints' => [
-        'owes_us' => 'They hold our money or owe it to us.',
-        'has_credit' => 'We hold their money or owe it to them.',
-        'mixed' => 'Live positions on both sides. These are not netted.',
-        'settled' => 'Nobody owes anybody anything.',
+        'owes_us' => 'The balance runs our way in every currency they are carrying.',
+        'has_credit' => 'We are holding money of theirs, or owe it to them.',
+        'mixed' => 'They owe us in one currency and we owe them in another. Currencies are never added together.',
+        'settled' => 'Nothing either way.',
     ],
 
     'cards' => [
@@ -74,7 +74,7 @@ return [
         'title' => 'Clients',
         'name' => 'Client',
         'status' => 'Status',
-        'positions' => 'Positions',
+        'balance' => 'Balance',
         'statement' => 'Statement',
         'none' => 'No client matches these filters.',
     ],
