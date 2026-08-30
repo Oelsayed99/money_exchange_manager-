@@ -117,7 +117,7 @@ describe('ledger:rebuild', function (): void {
         $this->artisan('ledger:rebuild')->assertExitCode(0);
 
         expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
-            ->toBe('1500.00');
+            ->toBe('-1500.00');
 
         $this->artisan('ledger:verify')->assertExitCode(0);
     });
@@ -172,7 +172,7 @@ describe('ledger:rebuild', function (): void {
         $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
         expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
-            ->toBe('1000.00');
+            ->toBe('-1000.00');
     });
 });
 

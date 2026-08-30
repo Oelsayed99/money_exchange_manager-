@@ -87,131 +87,113 @@ function statementFor(StatementMode $mode = StatementMode::Client, ?string $from
 // 2,574,000, leaving 1,383,540 of the client's money with us.
 describe('the sheet it replaces', function (): void {
     it('shows money coming in as in, not out', function (): void {
-        creditIn('500000');
+        creditIn('581000');
 
-        $row = statementFor()->rows[0];
+        $statement = statementFor();
+        $row = $statement->rows[0];
 
-        expect($row->in?->toDisplayString())->toBe('500000.00')
-            ->and($row->out)->toBeNull()
-            ->and($row->bucket)->toBe(BalanceBucket::CreditTrust);
+        expect($row->in?->toDisplayString())->toBe('581000.00')
+            ->and($row->out)->toBeNull();
     });
 
-    it('shows money going back out as out', function (): void {
-        creditIn('500000');
-        creditOut('200000');
+    // The running column the spreadsheet had, with the sign meaning what the owner
+    // says it means: negative is their money sitting with us.
+    it('runs the balance down the page', function (): void {
+        creditIn('581000', '2026-06-01');
+        creditIn('436540', '2026-06-02');
+        creditOut('200000', '2026-06-03');
 
-        $row = statementFor()->rows[1];
+        $statement = statementFor();
 
-        expect($row->out?->toDisplayString())->toBe('200000.00')
-            ->and($row->in)->toBeNull();
-    });
-
-    it('runs the position down the page', function (): void {
-        creditIn('3957540');
-        creditOut('2574000');
-
-        $rows = statementFor()->rows;
-
-        expect($rows[0]->balanceAfter->toDisplayString())->toBe('3957540.00')
-            ->and($rows[1]->balanceAfter->toDisplayString())->toBe('1383540.00');
+        expect(array_map(fn ($row) => $row->balanceAfter->toDisplayString(), $statement->rows))
+            ->toBe(['-581000.00', '-1017540.00', '-817540.00'])
+            ->and($statement->closing->toDisplayString())->toBe('-817540.00');
     });
 
     it('totals what came in and what went out separately', function (): void {
-        creditIn('3957540');
-        creditOut('2574000');
+        creditIn('581000');
+        creditIn('436540');
+        creditOut('200000');
 
         $statement = statementFor();
 
-        expect($statement->totalIn['credit_trust']->toDisplayString())->toBe('3957540.00')
-            ->and($statement->totalOut['credit_trust']->toDisplayString())->toBe('2574000.00')
-            ->and($statement->closing['credit_trust']->toDisplayString())->toBe('1383540.00');
+        expect($statement->totalIn->toDisplayString())->toBe('1017540.00')
+            ->and($statement->totalOut->toDisplayString())->toBe('200000.00');
     });
 });
 
-/*
- * The reason the sheet's single signed column had to go. A party can be holding our
- * money while owing us money, and one number cannot say both.
+/**
+ * One balance, and which way it runs.
+ *
+ * There were four positions here and a column for each. The owner's objection was that
+ * a party cannot both owe us and be owed by us — it is one thing and its difference.
+ * See ADR 0032.
  */
-describe('positions are kept apart', function (): void {
-    beforeEach(function (): void {
-        creditIn('1000000');
+describe('the running balance', function (): void {
+    it('nets everything a party has done into one figure', function (): void {
+        creditIn('899510');
+        creditOut('14890');
 
-        // They also took money against a receivable.
-        $this->posting->post($this->rules->build(new TransactionInput(
-            type: TransactionType::Out,
-            currency: $this->egp,
-            amount: $this->egp->money('400000'),
-            occurredAt: new DateTimeImmutable('2026-06-05'),
-            account: $this->safe,
-            counterparty: $this->party,
-        )));
-    });
-
-    it('reports each bucket on its own', function (): void {
         $statement = statementFor();
 
-        expect($statement->closing['credit_trust']->toDisplayString())->toBe('1000000.00')
-            ->and($statement->closing['receivable']->toDisplayString())->toBe('400000.00');
+        expect($statement->closing->toDisplayString())->toBe('-884620.00')
+            ->and($statement->theyOweUs())->toBeFalse();
     });
 
-    it('lists both buckets as in play', function (): void {
-        expect(array_map(fn (BalanceBucket $b): string => $b->value, statementFor()->buckets))
-            ->toBe(['receivable', 'credit_trust']);
-    });
+    it('reads positive when we have paid out more than we took in', function (): void {
+        creditOut('50000');
+        creditIn('20000');
 
-    // The two figures are 1,000,000 and 400,000. Anything that produced 600,000 would
-    // have netted an obligation against a holding.
-    it('offers no way to net them', function (): void {
         $statement = statementFor();
 
-        expect(method_exists($statement, 'balance'))->toBeFalse()
-            ->and(method_exists($statement, 'net'))->toBeFalse()
-            ->and(method_exists($statement, 'total'))->toBeFalse();
+        expect($statement->closing->toDisplayString())->toBe('30000.00')
+            ->and($statement->theyOweUs())->toBeTrue();
     });
 
-    // Money lent to them is value leaving us, even though it increases an asset.
-    it('calls a loan out, not in', function (): void {
-        $loan = collect(statementFor()->rows)->firstWhere('bucket', BalanceBucket::Receivable);
+    it('puts money going out in the out column', function (): void {
+        creditOut('14890');
 
-        expect($loan?->out?->toDisplayString())->toBe('400000.00')
-            ->and($loan?->in)->toBeNull();
+        $row = statementFor()->rows[0];
+
+        expect($row->out?->toDisplayString())->toBe('14890.00')
+            ->and($row->in)->toBeNull();
     });
 });
 
 describe('the period', function (): void {
-    beforeEach(function (): void {
-        creditIn('500000', '2026-05-10');
-        creditIn('300000', '2026-06-10');
-        creditOut('200000', '2026-06-20');
+    it('folds everything earlier into the opening balance', function (): void {
+        creditIn('500000', '2026-05-01');
+        creditIn('300000', '2026-06-15');
+
+        $statement = statementFor(from: '2026-06-01');
+
+        expect($statement->opening->toDisplayString())->toBe('-500000.00')
+            ->and($statement->rows)->toHaveCount(1);
     });
 
-    it('folds everything earlier into the opening position', function (): void {
-        $statement = statementFor(StatementMode::Client, '2026-06-01');
+    it('carries the opening into the running balance', function (): void {
+        creditIn('500000', '2026-05-01');
+        creditIn('300000', '2026-06-15');
 
-        expect($statement->opening['credit_trust']->toDisplayString())->toBe('500000.00')
-            ->and($statement->rows)->toHaveCount(2);
+        $statement = statementFor(from: '2026-06-01');
+
+        expect($statement->rows[0]->balanceAfter->toDisplayString())->toBe('-800000.00');
     });
 
-    // The running balance continues from the opening rather than restarting at zero,
-    // which is the whole point of an opening figure.
-    it('carries the opening into the running position', function (): void {
-        $rows = statementFor(StatementMode::Client, '2026-06-01')->rows;
-
-        expect($rows[0]->balanceAfter->toDisplayString())->toBe('800000.00');
-    });
-
-    // The 20 June settlement is after the closing date, so neither the line nor its
-    // effect on the position may appear.
     it('stops at the closing date', function (): void {
-        $statement = statementFor(StatementMode::Client, null, '2026-06-15');
+        creditIn('500000', '2026-06-01');
+        creditIn('300000', '2026-07-01');
 
-        expect($statement->rows)->toHaveCount(2)
-            ->and($statement->closing['credit_trust']->toDisplayString())->toBe('800000.00')
-            ->and($statement->totalOut['credit_trust']->isZero())->toBeTrue();
+        $statement = statementFor(to: '2026-06-30');
+
+        expect($statement->rows)->toHaveCount(1)
+            ->and($statement->closing->toDisplayString())->toBe('-500000.00');
     });
 
     it('opens at zero when no start date is given', function (): void {
-        expect(statementFor()->opening['credit_trust']->isZero())->toBeTrue();
+        creditIn('500000', '2026-05-01');
+
+        expect(statementFor()->opening->isZero())->toBeTrue();
     });
 });
 
@@ -364,19 +346,20 @@ describe('the screen', function (): void {
             ->viewData('page')['props'];
 
         expect($props['statement']['rows'][0]['in']['amount'])->toBeString()
-            ->and($props['statement']['closing']['credit_trust']['amount'])->toBe('500000.00');
+            ->and($props['statement']['closing']['amount'])->toBe('-500000.00')
+            ->and($props['statement']['they_owe_us'])->toBeFalse();
     });
 });
 
 describe('a declared opening that was never posted', function (): void {
     it('is reported rather than quietly merged in', function (): void {
         creditIn('500000');
-        $this->party->setOpeningBalance(BalanceBucket::CreditTrust, $this->egp, $this->egp->money('123'));
+        $this->party->setOpeningBalance($this->egp, $this->egp->money('123'));
 
         $statement = statementFor();
 
-        expect($statement->declaredOpening['credit_trust']->toDisplayString())->toBe('123.00')
+        expect($statement->declaredOpening?->toDisplayString())->toBe('123.00')
             // The ledger does not know about it, so the figures do not either.
-            ->and($statement->closing['credit_trust']->toDisplayString())->toBe('500000.00');
+            ->and($statement->closing->toDisplayString())->toBe('-500000.00');
     });
 });

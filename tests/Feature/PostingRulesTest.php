@@ -8,9 +8,9 @@ use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
-use App\Enums\BalanceBucket;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
+use App\Enums\LedgerOwnerType;
 use App\Enums\LegRole;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
@@ -29,6 +29,7 @@ beforeEach(function (): void {
 
     $this->egp = Currency::query()->where('code', 'EGP')->sole();
     $this->usd = Currency::query()->where('code', 'USD')->sole();
+    $this->eur = Currency::query()->where('code', 'EUR')->sole();
 
     $this->resolver = app(LedgerAccountResolver::class);
     $this->rules = app(PostingRules::class);
@@ -51,7 +52,9 @@ function input(TransactionType $type, string $amount, array $extra = []): Transa
         account: $extra['account'] ?? $test->safe,
         destinationAccount: $extra['destinationAccount'] ?? null,
         counterparty: $extra['counterparty'] ?? null,
-        bucket: $extra['bucket'] ?? null,
+        cashCurrency: $extra['cashCurrency'] ?? null,
+        cashAmount: $extra['cashAmount'] ?? null,
+        rate: $extra['rate'] ?? null,
         method: $extra['method'] ?? null,
     );
 }
@@ -78,7 +81,7 @@ describe('input validation', function (): void {
     });
 
     it('names what is missing rather than posting the wrong thing', function (): void {
-        expect(fn () => $this->rules->build(input(TransactionType::CreditDeposit, '100')))
+        expect(fn () => $this->rules->build(input(TransactionType::In, '100')))
             ->toThrow(InvalidArgumentException::class, 'needs a counterparty');
 
         expect(fn () => $this->rules->build(input(TransactionType::Transfer, '100')))
@@ -129,70 +132,136 @@ describe('transfer', function (): void {
     });
 });
 
-describe('counterparty movements', function (): void {
-    it('increases a receivable when money is lent', function (): void {
-        $this->posting->post($this->rules->build(input(TransactionType::LoanGiven, '500', [
+describe('client movements', function (): void {
+    // The whole relationship, in one signed figure. Out puts them into debt to us; in
+    // works it off and then past it. See ADR 0032.
+    it('raises the balance when money goes out to them', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::Out, '500', [
             'counterparty' => $this->party,
         ])));
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::Receivable, $this->party, $this->egp)))->toBe('500.00')
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('500.00')
             ->and(balanceOf($this->resolver->forAccount($this->safe, $this->egp)))->toBe('-500.00');
     });
 
-    it('reduces the receivable when it is settled', function (): void {
-        $this->posting->post($this->rules->build(input(TransactionType::LoanGiven, '500', ['counterparty' => $this->party])));
-        $this->posting->post($this->rules->build(input(TransactionType::ReceivableSettlement, '200', ['counterparty' => $this->party])));
+    it('lowers it when money comes in from them', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::Out, '500', ['counterparty' => $this->party])));
+        $this->posting->post($this->rules->build(input(TransactionType::In, '200', ['counterparty' => $this->party])));
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::Receivable, $this->party, $this->egp)))->toBe('300.00');
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('300.00');
     });
 
-    it('increases a payable when money is borrowed', function (): void {
-        $this->posting->post($this->rules->build(input(TransactionType::LoanReceived, '800', ['counterparty' => $this->party])));
+    // What the four buckets used to keep apart, said with a sign instead.
+    it('goes negative when they have given us more than we gave them', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::In, '899510', ['counterparty' => $this->party])));
+        $this->posting->post($this->rules->build(input(TransactionType::Out, '14890', ['counterparty' => $this->party])));
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::Payable, $this->party, $this->egp)))->toBe('800.00');
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('-884620.00');
     });
 
-    // Same entries, different intent. Reporting tells them apart by the type.
-    it('posts money received and a receivable settlement identically', function (): void {
-        $a = $this->posting->post($this->rules->build(input(TransactionType::MoneyReceived, '100', ['counterparty' => $this->party])));
-        $b = $this->posting->post($this->rules->build(input(TransactionType::ReceivableSettlement, '100', ['counterparty' => $this->party])));
+    it('uses one account per party per currency, not four', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::In, '100', ['counterparty' => $this->party])));
 
-        expect($a->entries->pluck('direction')->all())->toBe($b->entries->pluck('direction')->all())
-            ->and($a->entries->pluck('ledger_account_id')->all())->toBe($b->entries->pluck('ledger_account_id')->all())
-            ->and($a->type)->not->toBe($b->type);
+        $accounts = LedgerAccount::query()
+            ->where('owner_type', LedgerOwnerType::Counterparty->value)
+            ->where('owner_id', $this->party->id)
+            ->get();
+
+        expect($accounts)->toHaveCount(1)
+            ->and($accounts->first()->subkind)->toBe(LedgerAccountSubkind::ClientAccount);
+    });
+});
+
+/**
+ * Taking money in one currency and recording it against the client in another.
+ *
+ * "I got 10,000 dollars but I am booking it as pounds at 50.85." The dollars really
+ * arrived and the client's account really moved by 508,500 — two facts in two
+ * currencies, joined through the clearing accounts exactly as an exchange joins its
+ * legs, so each currency still balances on its own.
+ */
+describe('recording in another currency', function (): void {
+    it('moves the cash in one currency and the client in the other', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::In, '508500', [
+            'counterparty' => $this->party,
+            'cashCurrency' => $this->usd,
+            'cashAmount' => $this->usd->money('10000'),
+            'rate' => '50.85',
+        ])));
+
+        expect(balanceOf($this->resolver->forAccount($this->safe, $this->usd)))->toBe('10000.00')
+            ->and(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('-508500.00');
     });
 
-    // Section 5: a party can owe money and hold money at once, and the two never meet.
-    it('keeps a receivable and a credit balance against the same party apart', function (): void {
-        $this->posting->post($this->rules->build(input(TransactionType::CreditDeposit, '899510', ['counterparty' => $this->party])));
-        $this->posting->post($this->rules->build(input(TransactionType::LoanGiven, '14890', ['counterparty' => $this->party])));
+    it('balances in both currencies without an exchange rate in the check', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::In, '508500', [
+            'counterparty' => $this->party,
+            'cashCurrency' => $this->usd,
+            'cashAmount' => $this->usd->money('10000'),
+            'rate' => '50.85',
+        ])));
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp)))->toBe('899510.00')
-            ->and(balanceOf($this->resolver->forBucket(BalanceBucket::Receivable, $this->party, $this->egp)))->toBe('14890.00');
+        $this->artisan('ledger:verify --transactions')->assertExitCode(0);
+    });
+
+    it('does the same going out', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::Out, '1000000', [
+            'counterparty' => $this->party,
+            'cashCurrency' => $this->eur,
+            'cashAmount' => $this->eur->money('17182.13'),
+            'rate' => '58.20',
+        ])));
+
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('1000000.00')
+            ->and(balanceOf($this->resolver->forAccount($this->safe, $this->eur)))->toBe('-17182.13');
+    });
+
+    // Both figures reach the transaction list, so a row reads "10,000 USD in,
+    // 508,500 EGP against the account" rather than picking one and hiding the other.
+    it('records both amounts as legs', function (): void {
+        $transaction = $this->posting->post($this->rules->build(input(TransactionType::In, '508500', [
+            'counterparty' => $this->party,
+            'cashCurrency' => $this->usd,
+            'cashAmount' => $this->usd->money('10000'),
+            'rate' => '50.85',
+        ])));
+
+        expect($transaction->legs)->toHaveCount(2)
+            ->and($transaction->legs->pluck('currency_id')->all())
+            ->toBe([$this->usd->id, $this->egp->id]);
+    });
+
+    it('records one leg when nothing was converted', function (): void {
+        $transaction = $this->posting->post($this->rules->build(input(TransactionType::In, '5000', [
+            'counterparty' => $this->party,
+        ])));
+
+        expect($transaction->legs)->toHaveCount(1);
     });
 });
 
 describe('the real statement', function (): void {
-    it('reproduces the credit balance through nine deposits and one settlement', function (): void {
+    it('reproduces the balance through nine deposits and one settlement', function (): void {
         foreach (['581000', '436540', '500000', '560000', '450000', '275000', '463330', '341670', '350000'] as $amount) {
-            $this->posting->post($this->rules->build(input(TransactionType::CreditDeposit, $amount, [
+            $this->posting->post($this->rules->build(input(TransactionType::In, $amount, [
                 'counterparty' => $this->party,
                 'method' => MovementMethod::Transfer,
             ])));
         }
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp)))->toBe('3957540.00');
+        // Everything they handed over and nothing back: we are holding all of it.
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('-3957540.00');
 
-        // 50,000 USD at 51.48 — the EGP value leaving the liability.
-        $this->posting->post($this->rules->build(input(TransactionType::CreditSettlement, '2574000', [
+        // 50,000 USD at 51.48 — the EGP value going back out to them.
+        $this->posting->post($this->rules->build(input(TransactionType::Out, '2574000', [
             'counterparty' => $this->party,
         ])));
 
-        expect(balanceOf($this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp)))->toBe('1383540.00');
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('-1383540.00');
     });
 
     it('records how the money arrived', function (): void {
-        $transaction = $this->posting->post($this->rules->build(input(TransactionType::CreditDeposit, '950000', [
+        $transaction = $this->posting->post($this->rules->build(input(TransactionType::In, '950000', [
             'counterparty' => $this->party,
             'method' => MovementMethod::Cash,
         ])));
@@ -209,20 +278,26 @@ describe('opening balances', function (): void {
             ->and(balanceOf($this->resolver->system(LedgerAccountSubkind::OpeningEquity, $this->egp)))->toBe('25000.00');
     });
 
-    it('posts each counterparty bucket on the correct side', function (BalanceBucket $bucket): void {
+    // The one signed amount in the system: an opening position can start either way.
+    it('opens a debt to us with a positive figure', function (): void {
         $this->posting->post($this->rules->build(input(TransactionType::OpeningBalance, '1000', [
             'counterparty' => $this->party,
-            'bucket' => $bucket,
         ])));
 
-        // Positive either way: each account holds what its kind implies it should.
-        expect(balanceOf($this->resolver->forBucket($bucket, $this->party, $this->egp)))->toBe('1000.00');
-    })->with(BalanceBucket::cases());
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('1000.00');
+    });
 
-    it('debits equity for a liability bucket and credits it for an asset', function (): void {
-        $this->posting->post($this->rules->build(input(TransactionType::OpeningBalance, '1000', [
+    it('opens one the other way with a negative figure', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::OpeningBalance, '-884620', [
             'counterparty' => $this->party,
-            'bucket' => BalanceBucket::CreditTrust,
+        ])));
+
+        expect(balanceOf($this->resolver->forCounterparty($this->party, $this->egp)))->toBe('-884620.00');
+    });
+
+    it('credits equity when the party owes us and debits it when we owe them', function (): void {
+        $this->posting->post($this->rules->build(input(TransactionType::OpeningBalance, '-1000', [
+            'counterparty' => $this->party,
         ])));
 
         $entry = LedgerEntry::query()

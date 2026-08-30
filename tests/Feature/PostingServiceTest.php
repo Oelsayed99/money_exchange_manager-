@@ -185,9 +185,10 @@ describe('balances', function (): void {
         $cash = LedgerBalance::query()->where('ledger_account_id', $this->cashEgp->id)->sole();
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        // Both positive: each account holds what its kind implies it should.
+        // Cash came in, so it rises. The client's account falls by the same amount:
+        // they have given us more than we have given them.
         expect($cash->confirmed()->toDisplayString())->toBe('581000.00')
-            ->and($credit->confirmed()->toDisplayString())->toBe('581000.00');
+            ->and($credit->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     // The nine tranches from the real statement.
@@ -198,7 +199,7 @@ describe('balances', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('3957540.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-3957540.00');
     });
 
     it('decreases a liability when it is settled', function (): void {
@@ -217,7 +218,7 @@ describe('balances', function (): void {
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
         // Matches the statement exactly.
-        expect($credit->confirmed()->toDisplayString())->toBe('1383540.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-1383540.00');
     });
 
     it('lets a liability go negative, as decided', function (): void {
@@ -234,7 +235,7 @@ describe('balances', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('-50.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('50.00');
     });
 
     it('keeps each currency on its own account', function (): void {
@@ -292,7 +293,7 @@ describe('duplicate submission', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('581000.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     it('treats postings without a key as distinct', function (): void {
@@ -375,7 +376,7 @@ describe('reversal', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('100.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-100.00');
     });
 
     it('carries its own date rather than rewriting the original period', function (): void {

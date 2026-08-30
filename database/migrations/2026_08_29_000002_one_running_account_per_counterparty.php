@@ -48,6 +48,7 @@ return new class extends Migration
         'balance_adjustment', 'refund', 'reversal',
     ];
 
+    /** The nineteen that existed before. A rollback has to restore exactly these. */
     private const TYPES_BEFORE = [
         'opening_balance', 'deposit', 'withdrawal', 'transfer', 'money_received',
         'money_paid', 'loan_given', 'loan_received', 'receivable_settlement',
@@ -66,10 +67,15 @@ return new class extends Migration
         // one row per currency — which is the whole point.
         DB::statement('ALTER TABLE counterparty_opening_balances DROP CHECK chk_counterparty_bucket');
 
+        // The new index goes on before the old one comes off. MySQL refuses to drop an
+        // index a foreign key is leaning on, and `counterparty_id` leads both.
+        Schema::table('counterparty_opening_balances', function (Blueprint $table): void {
+            $table->unique(['counterparty_id', 'currency_id'], 'counterparty_opening_per_currency');
+        });
+
         Schema::table('counterparty_opening_balances', function (Blueprint $table): void {
             $table->dropUnique('counterparty_opening_unique');
             $table->dropColumn('bucket');
-            $table->unique(['counterparty_id', 'currency_id'], 'counterparty_opening_unique');
         });
     }
 
@@ -78,9 +84,12 @@ return new class extends Migration
         $this->refuseIfAnyHistoryExists();
 
         Schema::table('counterparty_opening_balances', function (Blueprint $table): void {
-            $table->dropUnique('counterparty_opening_unique');
             $table->string('bucket', 32)->after('currency_id');
             $table->unique(['counterparty_id', 'bucket', 'currency_id'], 'counterparty_opening_unique');
+        });
+
+        Schema::table('counterparty_opening_balances', function (Blueprint $table): void {
+            $table->dropUnique('counterparty_opening_per_currency');
         });
 
         DB::statement(

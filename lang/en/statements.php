@@ -25,6 +25,7 @@ return [
         'profit' => 'Profit',
     ],
 
+    'totals' => 'Totals',
     'in_hint' => 'Money we took from them.',
     'out_hint' => 'Money we paid to them.',
     'they_owe_us' => 'They owe us :amount.',

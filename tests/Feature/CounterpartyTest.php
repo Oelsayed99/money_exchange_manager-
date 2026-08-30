@@ -5,13 +5,12 @@ declare(strict_types=1);
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Enums\AccountType;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Models\Account;
 use App\Models\Counterparty;
 use App\Models\Currency;
 use Database\Seeders\CurrencySeeder;
-use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 beforeEach(function (): void {
@@ -19,6 +18,7 @@ beforeEach(function (): void {
     app(CurrencyRegistry::class)->flush();
 
     $this->usd = Currency::query()->where('code', 'USD')->sole();
+    $this->egp = Currency::query()->where('code', 'EGP')->sole();
     $this->aed = Currency::query()->where('code', 'AED')->sole();
 });
 
@@ -56,158 +56,98 @@ describe('schema', function (): void {
 });
 
 // Section 5 is explicit: these must not be combined into one balance field.
-describe('the separation Section 5 requires', function (): void {
-    it('has no single balance column anywhere', function (): void {
-        expect(Schema::getColumnListing('counterparties'))
-            ->not->toContain('balance')
-            ->not->toContain('receivable')
-            ->not->toContain('payable')
-            ->not->toContain('custody');
+/**
+ * One running balance per party per currency.
+ *
+ * There were four positions here — custody, receivable, payable, credit held — kept
+ * apart so that "they owe me" and "I am holding their money" could never be confused.
+ * In use those turned out to be four descriptions of one relationship, and the owner's
+ * objection was exact: they cannot both be true at once, they are one thing and its
+ * difference. See ADR 0032.
+ *
+ * **Positive means they owe us.** Negative means we owe them.
+ */
+describe('the running balance', function (): void {
+    it('has no bucket column anywhere', function (): void {
+        expect(Schema::hasColumn('counterparty_opening_balances', 'bucket'))->toBeFalse();
     });
 
-    // The case that makes the requirement real: a party who simultaneously owes money
-    // and holds money on the business's behalf. Netting these to a single figure
-    // destroys the information needed to chase one and reconcile the other.
-    it('holds custody and receivable against the same party at once', function (): void {
-        $party = Counterparty::factory()->withPositions([
-            'custody' => ['USD' => '5000'],
-            'receivable' => ['USD' => '1200'],
-        ])->create();
-
-        expect($party->openingBalance(BalanceBucket::Custody, $this->usd)?->toDisplayString())->toBe('5000.00')
-            ->and($party->openingBalance(BalanceBucket::Receivable, $this->usd)?->toDisplayString())->toBe('1200.00');
-    });
-
-    it('keeps a receivable and a payable to the same party apart', function (): void {
-        $party = Counterparty::factory()->withPositions([
-            'receivable' => ['USD' => '800'],
-            'payable' => ['USD' => '300'],
-        ])->create();
-
-        // Emphatically not 500.
-        expect($party->openingBalance(BalanceBucket::Receivable, $this->usd)?->toDisplayString())->toBe('800.00')
-            ->and($party->openingBalance(BalanceBucket::Payable, $this->usd)?->toDisplayString())->toBe('300.00');
-    });
-
-    it('keeps every bucket separate in every currency', function (): void {
-        $party = Counterparty::factory()->withPositions([
-            'custody' => ['USD' => '100', 'AED' => '200'],
-            'receivable' => ['USD' => '300', 'AED' => '400'],
-            'payable' => ['USD' => '500', 'AED' => '600'],
-            'credit_trust' => ['USD' => '700', 'AED' => '800'],
-        ])->create();
-
-        expect($party->openingPositions())->toBe([
-            'custody' => ['USD' => '100.00', 'AED' => '200.00'],
-            'receivable' => ['USD' => '300.00', 'AED' => '400.00'],
-            'payable' => ['USD' => '500.00', 'AED' => '600.00'],
-            'credit_trust' => ['USD' => '700.00', 'AED' => '800.00'],
-        ]);
-    });
-
-    it('refuses two opening positions for the same bucket and currency', function (): void {
+    it('holds one position per currency', function (): void {
         $party = Counterparty::factory()->create();
 
-        $party->openingBalances()->create([
-            'bucket' => BalanceBucket::Custody->value,
-            'currency_id' => $this->usd->id,
-            'amount' => '1',
-        ]);
+        $party->setOpeningBalance($this->usd, $this->usd->money('5000'));
+        $party->setOpeningBalance($this->egp, $this->egp->money('-120000'));
 
-        expect(fn () => $party->openingBalances()->create([
-            'bucket' => BalanceBucket::Custody->value,
-            'currency_id' => $this->usd->id,
-            'amount' => '2',
-        ]))->toThrow(QueryException::class);
+        expect($party->openingPositions())->toBe(['USD' => '5000.00', 'EGP' => '-120000.00']);
     });
 
-    it('refuses a bucket the system does not recognise', function (): void {
+    it('accepts a negative figure, because that is half the point', function (): void {
         $party = Counterparty::factory()->create();
 
-        expect(fn () => $party->openingBalances()->create([
-            'bucket' => 'vibes',
+        $party->setOpeningBalance($this->egp, $this->egp->money('-884620'));
+
+        expect($party->openingBalance($this->egp)?->toDisplayString())->toBe('-884620.00');
+    });
+
+    it('refuses two positions for the same currency', function (): void {
+        $party = Counterparty::factory()->create();
+
+        $party->setOpeningBalance($this->usd, $this->usd->money('100'));
+
+        expect(DB::table('counterparty_opening_balances')->where('counterparty_id', $party->id)->count())->toBe(1);
+
+        expect(fn () => DB::table('counterparty_opening_balances')->insert([
+            'counterparty_id' => $party->id,
             'currency_id' => $this->usd->id,
-            'amount' => '1',
-        ]))->toThrow(ValueError::class, 'not a valid backing value');
+            'amount' => '200',
+            'posted_amount' => '0',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]))->toThrow(Exception::class);
     });
 
     it('updates an existing position rather than adding a second', function (): void {
-        $party = Counterparty::factory()->withPositions(['custody' => ['USD' => '100']])->create();
+        $party = Counterparty::factory()->create();
 
-        $party->setOpeningBalance(BalanceBucket::Custody, $this->usd, $this->usd->money('250'));
+        $party->setOpeningBalance($this->usd, $this->usd->money('100'));
+        $party->setOpeningBalance($this->usd, $this->usd->money('250'));
 
         expect($party->openingBalances()->count())->toBe(1)
-            ->and($party->openingBalance(BalanceBucket::Custody, $this->usd)?->toDisplayString())->toBe('250.00');
+            ->and($party->openingBalance($this->usd)?->toDisplayString())->toBe('250.00');
     });
-});
-
-describe('bucket semantics', function (): void {
-    it('classifies each bucket as an asset or a liability', function (): void {
-        expect(BalanceBucket::Custody->isAsset())->toBeTrue()
-            ->and(BalanceBucket::Receivable->isAsset())->toBeTrue()
-            ->and(BalanceBucket::Payable->isLiability())->toBeTrue()
-            ->and(BalanceBucket::CreditTrust->isLiability())->toBeTrue();
-    });
-
-    // Custody and credit/trust are mirrors: the business's money held by them, versus
-    // their money held by the business.
-    it('pairs each bucket with its mirror', function (): void {
-        expect(BalanceBucket::Custody->mirror())->toBe(BalanceBucket::CreditTrust)
-            ->and(BalanceBucket::CreditTrust->mirror())->toBe(BalanceBucket::Custody)
-            ->and(BalanceBucket::Receivable->mirror())->toBe(BalanceBucket::Payable)
-            ->and(BalanceBucket::Payable->mirror())->toBe(BalanceBucket::Receivable);
-    });
-
-    it('mirrors symmetrically for every bucket', function (BalanceBucket $bucket): void {
-        expect($bucket->mirror()->mirror())->toBe($bucket)
-            ->and($bucket->mirror()->isAsset())->toBe($bucket->isLiability());
-    })->with(BalanceBucket::cases());
 });
 
 describe('declaring opening positions', function (): void {
     it('distinguishes an undeclared position from a declared zero', function (): void {
-        $party = Counterparty::factory()->withPositions(['custody' => ['USD' => '0']])->create();
-
-        expect($party->openingBalance(BalanceBucket::Custody, $this->usd)?->isZero())->toBeTrue()
-            ->and($party->openingBalance(BalanceBucket::Receivable, $this->usd))->toBeNull();
-    });
-
-    // A negative receivable is a payable. Allowing it would quietly undo the
-    // separation the whole model exists to maintain.
-    it('refuses a negative position and names the bucket it belongs in', function (): void {
         $party = Counterparty::factory()->create();
 
-        expect(fn () => $party->setOpeningBalance(BalanceBucket::Receivable, $this->usd, $this->usd->money('-1')))
-            ->toThrow(InvalidArgumentException::class, 'A negative receivable is a payable');
+        expect($party->openingBalance($this->usd))->toBeNull();
+
+        $party->setOpeningBalance($this->usd, $this->usd->money('0'));
+
+        expect($party->openingBalance($this->usd)?->isZero())->toBeTrue();
     });
-
-    it('refuses a negative position in every bucket', function (BalanceBucket $bucket): void {
-        $party = Counterparty::factory()->create();
-
-        expect(fn () => $party->setOpeningBalance($bucket, $this->usd, $this->usd->money('-0.01')))
-            ->toThrow(InvalidArgumentException::class);
-    })->with(BalanceBucket::cases());
 
     it('refuses an amount in a currency other than the one named', function (): void {
         $party = Counterparty::factory()->create();
 
-        expect(fn () => $party->setOpeningBalance(BalanceBucket::Custody, $this->usd, $this->aed->money('1')))
+        expect(fn () => $party->setOpeningBalance($this->usd, $this->egp->money('100')))
             ->toThrow(CurrencyMismatch::class);
     });
 
     it('keeps full precision', function (): void {
         $party = Counterparty::factory()->create();
 
-        $party->setOpeningBalance(BalanceBucket::Custody, $this->usd, $this->usd->money('1234.5678901234'));
+        $party->setOpeningBalance($this->usd, $this->usd->money('1234.5678901234'));
 
-        expect($party->openingBalance(BalanceBucket::Custody, $this->usd)?->toStorageString())
-            ->toBe('1234.5678901234');
+        expect($party->openingBalance($this->usd)?->toStorageString())->toBe('1234.5678901234');
     });
 
     it('refuses to delete a currency a position uses', function (): void {
-        Counterparty::factory()->withPositions(['custody' => ['USD' => '1']])->create();
+        $party = Counterparty::factory()->create();
+        $party->setOpeningBalance($this->usd, $this->usd->money('100'));
 
-        expect(fn () => $this->usd->delete())->toThrow(QueryException::class);
+        expect(fn () => $this->usd->delete())->toThrow(Exception::class);
     });
 });
 

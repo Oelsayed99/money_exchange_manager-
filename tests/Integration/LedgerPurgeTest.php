@@ -38,8 +38,8 @@ beforeEach(function (): void {
     $this->client = Counterparty::factory()->create(['name' => 'Kept client']);
     $this->client->openingBalances()->create([
         'currency_id' => $this->egp->id,
-        'bucket' => BalanceBucket::CreditTrust,
-        'amount' => '899510',
+        'amount' => '-899510',
+        'posted_amount' => '0',
     ]);
 
     app(ExchangeService::class)->record(new ExchangeInput(

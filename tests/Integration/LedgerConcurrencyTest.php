@@ -107,7 +107,7 @@ it('accumulates every posting without losing one', function (): void {
     $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
     expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
-        ->toBe('2500.00');
+        ->toBe('-2500.00');
 
     $this->artisan('ledger:verify')->assertExitCode(0);
 });

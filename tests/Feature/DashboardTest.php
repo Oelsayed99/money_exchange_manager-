@@ -82,18 +82,18 @@ describe('status', function (): void {
         expect(dashboard()->counterparties[0]->status)->toBe(CounterpartyStatus::HasCredit);
     });
 
-    // The case a single signed column cannot express, and the reason the four buckets
-    // exist. 1,000,000 held and 400,000 owed is not 600,000 of anything.
-    it('reads a party on both sides as both', function (): void {
+    // What "both sides" now means. Within one currency there is one balance and it
+    // runs one way: 1,000,000 in and 400,000 out is 600,000 of theirs still with us.
+    // See ADR 0032.
+    it('nets a party within a currency', function (): void {
         $both = party('Both');
         movement(TransactionType::In, $both, '1000000');
         movement(TransactionType::Out, $both, '400000');
 
         $row = dashboard()->counterparties[0];
 
-        expect($row->status)->toBe(CounterpartyStatus::Mixed)
-            ->and($row->positions['EGP']['credit_trust']->toDisplayString())->toBe('1000000.00')
-            ->and($row->positions['EGP']['receivable']->toDisplayString())->toBe('400000.00');
+        expect($row->status)->toBe(CounterpartyStatus::HasCredit)
+            ->and($row->positions['EGP']->toDisplayString())->toBe('-600000.00');
     });
 
     // Owing in one currency while holding credit in another is genuinely both, and
@@ -240,9 +240,11 @@ describe('the statistics', function (): void {
         movement(TransactionType::In, party('Holder'), '500000');
         movement(TransactionType::Out, party('Borrower'), '400000');
 
-        $both = party('Both');
-        movement(TransactionType::In, $both, '900000');
-        movement(TransactionType::Out, $both, '100000');
+        // Mixed now means what it always should have: owed in one currency, holding
+        // in another. Within one currency there is one balance running one way.
+        $mixed = party('Mixed');
+        movement(TransactionType::In, $mixed, '900000');
+        movement(TransactionType::Out, $mixed, '2000', $this->usd);
 
         // The split describes the whole book, so narrowing to one status must not
         // reduce the chart to a single slice.
@@ -288,9 +290,11 @@ describe('the statistics', function (): void {
 
         $top = dashboard(new DashboardFilters(currency: $this->egp))->topClients;
 
+        // One balance, reported on whichever side its sign puts it: 1,000,000 in less
+        // 400,000 out leaves 600,000 of theirs with us.
         expect($top[0]->name)->toBe('Big')
-            ->and($top[0]->owedToThem->toDisplayString())->toBe('1000000.00')
-            ->and($top[0]->owedToUs->toDisplayString())->toBe('400000.00')
+            ->and($top[0]->owedToThem->toDisplayString())->toBe('600000.00')
+            ->and($top[0]->owedToUs->isZero())->toBeTrue()
             ->and($top[1]->name)->toBe('Small');
     });
 

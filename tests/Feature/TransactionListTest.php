@@ -156,7 +156,7 @@ describe('filtering', function (): void {
     });
 
     it('narrows by type', function (): void {
-        listing('type=credit_deposit')->assertInertia(fn (Assert $page) => $page->has('transactions.data', 1));
+        listing('type=in')->assertInertia(fn (Assert $page) => $page->has('transactions.data', 1));
     });
 
     it('narrows by counterparty', function (): void {

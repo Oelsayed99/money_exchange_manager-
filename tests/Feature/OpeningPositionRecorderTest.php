@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Enums\Role;
 use App\Enums\TransactionType;
@@ -78,13 +77,13 @@ function openingsOf(Counterparty $party): Collection
  */
 function creditPosition(Counterparty $party, Currency $currency): string
 {
-    $account = app(LedgerAccountResolver::class)->forBucket(BalanceBucket::CreditTrust, $party, $currency);
+    $account = app(LedgerAccountResolver::class)->forCounterparty($party, $currency);
 
     return LedgerBalance::query()->where('ledger_account_id', $account->id)->sole()->confirmed()->toDisplayString();
 }
 
 it('posts a transaction when a position is first declared', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
 
     $party = Counterparty::query()->sole();
     $openings = openingsOf($party);
@@ -95,7 +94,7 @@ it('posts a transaction when a position is first declared', function (): void {
 
 // The whole point of the request: it has a date, and you can find it.
 it('dates it and puts it in the transaction list', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
 
     $party = Counterparty::query()->sole();
 
@@ -110,10 +109,10 @@ it('dates it and puts it in the transaction list', function (): void {
 });
 
 it('posts only the difference when a figure is raised', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
     $party = Counterparty::query()->sole();
 
-    saveParty($party, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '950000']]);
+    saveParty($party, [['currency_id' => $this->egp->id, 'amount' => '950000']]);
 
     $openings = openingsOf($party);
 
@@ -128,17 +127,17 @@ it('posts only the difference when a figure is raised', function (): void {
 
 // The ledger has no way to un-post, so lowering a figure is a posting the other way.
 it('posts the other way when a figure is lowered', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
     $party = Counterparty::query()->sole();
 
-    saveParty($party, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '800000']]);
+    saveParty($party, [['currency_id' => $this->egp->id, 'amount' => '800000']]);
 
     expect(openingsOf($party))->toHaveCount(2)
         ->and(creditPosition($party, $this->egp))->toBe('800000.00');
 });
 
 it('unwinds the position when it is removed, and only then forgets it', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
     $party = Counterparty::query()->sole();
 
     saveParty($party, []);
@@ -150,45 +149,42 @@ it('unwinds the position when it is removed, and only then forgets it', function
 
 // Saving a counterparty whose figures nobody touched must not write anything.
 it('posts nothing when a figure is unchanged', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
     $party = Counterparty::query()->sole();
 
-    saveParty($party, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty($party, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
 
     expect(openingsOf($party))->toHaveCount(1);
 });
 
 it('handles an asset position the same way, in the opposite direction', function (): void {
-    saveParty(null, [['bucket' => 'receivable', 'currency_id' => $this->egp->id, 'amount' => '14890']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '14890']]);
 
     $party = Counterparty::query()->sole();
-    $account = app(LedgerAccountResolver::class)->forBucket(BalanceBucket::Receivable, $party, $this->egp);
+    $account = app(LedgerAccountResolver::class)->forCounterparty($party, $this->egp);
     $balance = LedgerBalance::query()->where('ledger_account_id', $account->id)->sole()->confirmed();
 
     expect($balance->toDisplayString())->toBe('14890.00');
 });
 
 it('leaves a ledger that balances after every change', function (): void {
-    saveParty(null, [
-        ['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510'],
-        ['bucket' => 'receivable', 'currency_id' => $this->egp->id, 'amount' => '14890'],
-    ]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '-884620']]);
 
     $party = Counterparty::query()->sole();
 
-    saveParty($party, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '500000']]);
+    saveParty($party, [['currency_id' => $this->egp->id, 'amount' => '500000']]);
 
     $this->artisan('ledger:verify --transactions')->assertExitCode(0);
 });
 
 // The statement's warning existed because these were not in the ledger. Now they are.
 it('stops warning on the statement once the position is posted', function (): void {
-    saveParty(null, [['bucket' => 'credit_trust', 'currency_id' => $this->egp->id, 'amount' => '899510']]);
+    saveParty(null, [['currency_id' => $this->egp->id, 'amount' => '899510']]);
     $party = Counterparty::query()->sole();
 
     $props = $this->actingAs($this->manager)
         ->get("/counterparties/{$party->id}/statement?currency=EGP")
         ->viewData('page')['props'];
 
-    expect($props['statement']['declared_opening'])->toBe([]);
+    expect($props['statement']['declared_opening'])->toBeNull();
 });

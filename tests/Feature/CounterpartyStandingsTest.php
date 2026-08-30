@@ -69,47 +69,43 @@ function standingRow(Counterparty $party): array
     return is_array($row) ? $row : [];
 }
 
-it('adds the buckets on one side together', function (): void {
-    // Their money with us, arriving two different ways: money left on deposit, and
-    // money we borrowed. Both are ours to give back.
+/**
+ * One signed balance per party per currency.
+ *
+ * The owner's objection to two columns was exact: a party cannot both owe us and be
+ * owed by us. It is one figure and its sign — positive means they owe us, negative that
+ * we are holding theirs. See ADR 0032.
+ */
+it('nets everything into one figure per currency', function (): void {
+    // They gave us 899,510 and we gave them back 14,890.
     postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::In, $this->client, $this->egp, '100490', $this->safe);
+    postToBucket(TransactionType::Out, $this->client, $this->egp, '14890', $this->safe);
 
     $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
 
-    expect($standing['theirs'])->toBe('1000000.00')
-        ->and($standing['ours'])->toBe('0.00');
+    expect($standing['balance'])->toBe('-884620.00');
 });
 
-// The line that must not move. A party owing us and holding our money is two facts,
-// and one number cannot carry both.
-it('never adds the two sides together', function (): void {
+it('reads positive when we have paid out more than we took in', function (): void {
+    postToBucket(TransactionType::Out, $this->client, $this->egp, '50000', $this->safe);
+    postToBucket(TransactionType::In, $this->client, $this->egp, '20000', $this->safe);
+
+    $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
+
+    expect($standing['balance'])->toBe('30000.00');
+});
+
+// There is no second column, and no way to ask for one.
+it('sends one figure and no other side', function (): void {
     postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::Out, $this->client, $this->egp, '14890', $this->safe);
 
     $row = standingRow($this->client);
     $standing = collect($row['standings'])->firstWhere('code', 'EGP');
 
-    expect($standing['ours'])->toBe('14890.00')
-        ->and($standing['theirs'])->toBe('899510.00');
-
-    // Neither the difference (884,620) nor the total (914,400) appears anywhere.
-    expect(json_encode($row))->not->toContain('884620')
-        ->not->toContain('914400')
-        ->and($row)->not->toHaveKey('balance')
-        ->and($row)->not->toHaveKey('net');
-});
-
-it('keeps the four buckets available for the drill-down', function (): void {
-    postToBucket(TransactionType::In, $this->client, $this->egp, '899510', $this->safe);
-    postToBucket(TransactionType::Out, $this->client, $this->egp, '14890', $this->safe);
-
-    $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
-
-    expect($standing['buckets'])->toHaveKey('credit_trust')
-        ->toHaveKey('receivable')
-        ->and($standing['buckets']['credit_trust'])->toBe('899510.00')
-        ->and($standing['buckets']['receivable'])->toBe('14890.00');
+    expect($standing)->toHaveKey('balance')
+        ->and($standing)->not->toHaveKey('ours')
+        ->and($standing)->not->toHaveKey('theirs')
+        ->and($standing)->not->toHaveKey('buckets');
 });
 
 it('reports each currency on its own', function (): void {
@@ -119,8 +115,8 @@ it('reports each currency on its own', function (): void {
     $standings = collect(standingRow($this->client)['standings'])->keyBy('code');
 
     expect($standings)->toHaveCount(2)
-        ->and($standings['EGP']['theirs'])->toBe('899510.00')
-        ->and($standings['USD']['ours'])->toBe('2000.00');
+        ->and($standings['EGP']['balance'])->toBe('-899510.00')
+        ->and($standings['USD']['balance'])->toBe('2000.00');
 });
 
 it('sends every figure as a string, never a JSON number', function (): void {
@@ -128,15 +124,15 @@ it('sends every figure as a string, never a JSON number', function (): void {
 
     $standing = collect(standingRow($this->client)['standings'])->firstWhere('code', 'EGP');
 
-    expect($standing['theirs'])->toBeString()
-        ->and(json_encode($standing))->toContain('"theirs":"899510.25"');
+    expect($standing['balance'])->toBeString()
+        ->and(json_encode($standing))->toContain('"balance":"-899510.25"');
 });
 
 // The figures come from the ledger. A position somebody typed on the record but never
 // posted is not in them — which is why the row still carries its declared openings, so
 // the interface can say so rather than quietly showing zero.
 it('reads the ledger, not the declared openings', function (): void {
-    $party = Counterparty::factory()->withPositions(['credit_trust' => ['EGP' => '899510']])->create(['name' => 'Declared only']);
+    $party = Counterparty::factory()->withPositions(['EGP' => '-899510'])->create(['name' => 'Declared only']);
 
     $row = standingRow($party);
 

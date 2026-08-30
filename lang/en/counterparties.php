@@ -31,39 +31,21 @@ return [
         'other' => 'Other',
     ],
 
-    'buckets' => [
-        'custody' => 'Custody',
-        'receivable' => 'Receivable',
-        'payable' => 'Payable',
-        'credit_trust' => 'Credit held',
-    ],
-
-    'bucket_hints' => [
-        'custody' => 'Our money, physically held by them.',
-        'receivable' => 'Their money, owed to us.',
-        'payable' => 'Our money, owed to them.',
-        'credit_trust' => 'Their money, physically held by us.',
-    ],
-
-    'opening_positions' => 'Opening positions',
-    'opening_hint' => 'These are kept apart on purpose. A party can owe money and hold money at the same time, and netting the two hides what you need to act on. A negative figure is not accepted — record it in the opposite column instead.',
-    'assets' => 'Owed to us or held for us',
-    'liabilities' => 'Owed by us or held by us',
-
     // The list shows one figure a side. The four buckets are still what the ledger
     // holds and what the statement shows; these name the two sides in the plainest
     // words there are for them.
-    'ours_with_them' => 'Our money with them',
-    'theirs_with_us' => 'Their money with us',
-    'ours_hint' => 'What they hold of ours and what they owe us, added together. The split is on the statement.',
-    'theirs_hint' => 'What we hold of theirs and what we owe them, added together. The split is on the statement.',
+    'opening_hint' => 'Where the relationship stood before you started recording — one figure per currency. Positive means they owed you; negative means you were holding money of theirs. Saving writes it to the ledger, dated today.',
+    'opening_positions' => 'Opening balance',
+    'balance' => 'Balance',
+    'balance_hint' => 'Everything that went out to them, less everything that came in. Positive means they owe us; negative means we owe them.',
+    'they_owe_us' => 'they owe us',
+    'we_owe_them' => 'we owe them',
     'settled' => 'Nothing either way',
-    'list_hint' => 'Each column is one side added up. Behind them the ledger keeps four positions apart — :buckets — and never nets one against another. Open a statement to see the split and the movements behind it.',
+    'list_hint' => 'One running balance per currency: everything paid out, less everything taken in. Open a statement to see the movements behind a figure.',
     'open_statement' => 'Open the statement for :currency',
     'unposted_opening' => 'Opening position not posted',
-    'opening_transaction' => 'Opening position — :bucket',
+    'opening_transaction' => 'Opening balance',
     'unposted_opening_hint' => 'Declared on this party but never recorded as a transaction, so it is not in the figures here. Open the statement to see it.',
     'no_positions' => 'No opening positions declared.',
-    'negative_not_allowed' => 'A negative :bucket is a :mirror. Record it there instead.',
     'nothing_declared' => '—',
 ];

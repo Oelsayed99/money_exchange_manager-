@@ -55,7 +55,7 @@ function addVolume(int $parties, int $movementsEach): void
 
         foreach (range(1, $movementsEach) as $m) {
             $test->posting->post($test->rules->build(new TransactionInput(
-                type: $m % 2 === 0 ? TransactionType::CreditDeposit : TransactionType::LoanGiven,
+                type: $m % 2 === 0 ? TransactionType::In : TransactionType::Out,
                 currency: $test->egp,
                 amount: $test->egp->money((string) (1000 + $m)),
                 occurredAt: new DateTimeImmutable('2026-06-0'.(($m % 9) + 1)),

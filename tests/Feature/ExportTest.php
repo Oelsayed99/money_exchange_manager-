@@ -197,7 +197,7 @@ describe('the transactions export', function (): void {
     });
 
     it('honours the same filters as the list', function (): void {
-        expect(bytes(transactionsCsv('type=credit_deposit')))->toContain('REF-1')
+        expect(bytes(transactionsCsv('type=in')))->toContain('REF-1')
             ->and(bytes(transactionsCsv('type=expense')))->not->toContain('REF-1');
     });
 

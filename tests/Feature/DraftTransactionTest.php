@@ -92,7 +92,7 @@ describe('committing a draft', function (): void {
         expect($posted->status)->toBe(TransactionStatus::Posted)
             ->and($posted->entries)->toHaveCount(2)
             ->and(LedgerBalance::query()->where('ledger_account_id', ($this->creditAccount)()->id)->sole()
-                ->confirmed()->toDisplayString())->toBe('581000.00');
+                ->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     // Anything already referring to the draft still refers to the same thing.
@@ -217,6 +217,6 @@ describe('integrity', function (): void {
         $this->artisan('ledger:verify --transactions')->assertExitCode(0);
 
         expect(LedgerBalance::query()->where('ledger_account_id', ($this->creditAccount)()->id)->sole()
-            ->confirmed()->toDisplayString())->toBe('1000.00');
+            ->confirmed()->toDisplayString())->toBe('-1000.00');
     });
 });
