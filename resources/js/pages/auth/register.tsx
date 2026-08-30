@@ -8,20 +8,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import { useTranslations } from '@/lib/i18n';
 
 type RegisterForm = {
     name: string;
+    business_name: string;
     email: string;
     password: string;
     password_confirmation: string;
 };
 
-export default function Register() {
+export default function Register({ providers = [] }: { providers?: SocialProviderOption[] }) {
     const { t } = useTranslations();
 
     const { data, setData, post, processing, errors, reset } = useForm<RegisterForm>({
         name: '',
+        business_name: '',
         email: '',
         password: '',
         password_confirmation: '',
@@ -37,6 +40,8 @@ export default function Register() {
     return (
         <AuthLayout title={t('auth.register.title')} description={t('auth.register.description')}>
             <Head title={t('auth.register.head')} />
+            <SocialButtons providers={providers} disabled={processing} />
+
             <form className="flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
                     <div className="grid gap-2">
@@ -54,6 +59,25 @@ export default function Register() {
                             placeholder={t('auth.form.name_placeholder')}
                         />
                         <InputError message={errors.name} className="mt-2" />
+                    </div>
+
+                    {/* Signing up creates a set of books, and books belong to a business.
+                        Asked for here rather than guessed at, because it is what every
+                        statement this person hands a client will be headed with. */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="business_name">{t('auth.form.business_name')}</Label>
+                        <Input
+                            id="business_name"
+                            type="text"
+                            required
+                            tabIndex={2}
+                            autoComplete="organization"
+                            value={data.business_name}
+                            onChange={(e) => setData('business_name', e.target.value)}
+                            disabled={processing}
+                            placeholder={t('auth.form.business_name_placeholder')}
+                        />
+                        <InputError message={errors.business_name} className="mt-2" />
                     </div>
 
                     <div className="grid gap-2">

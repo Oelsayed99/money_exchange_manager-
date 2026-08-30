@@ -23,6 +23,8 @@ return [
      * "Password" would quietly overwrite it.
      */
     'form' => [
+        'business_name' => 'Business name',
+        'business_name_placeholder' => 'Your exchange office',
         'name' => 'Name',
         'name_placeholder' => 'Full name',
         'email' => 'Email address',
@@ -90,4 +92,7 @@ return [
         'google' => 'Continue with Google',
         'apple' => 'Continue with Apple',
     ],
+
+    // The rule between the provider buttons and the form.
+    'or' => 'or',
 ];

@@ -5,30 +5,30 @@ import { FormEventHandler } from 'react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
+import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import { useTranslations } from '@/lib/i18n';
 
 type LoginForm = {
     email: string;
     password: string;
-    remember: boolean;
 };
 
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+    /** Only the providers holding credentials. Empty until Google is configured. */
+    providers?: SocialProviderOption[];
 }
 
-export default function Login({ status, canResetPassword }: LoginProps) {
+export default function Login({ status, canResetPassword, providers = [] }: LoginProps) {
     const { t } = useTranslations();
 
     const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
         email: '',
         password: '',
-        remember: false,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -41,6 +41,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     return (
         <AuthLayout title={t('auth.login.title')} description={t('auth.login.description')}>
             <Head title={t('auth.login.head')} />
+
+            <SocialButtons providers={providers} disabled={processing} />
 
             <form className="flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
@@ -82,10 +84,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         <InputError message={errors.password} />
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <Checkbox id="remember" name="remember" tabIndex={3} />
-                        <Label htmlFor="remember">{t('auth.login.remember')}</Label>
-                    </div>
+                    
 
                     <Button type="submit" className="mt-4 w-full" tabIndex={4} disabled={processing}>
                         {processing && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
