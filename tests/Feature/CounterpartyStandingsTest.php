@@ -40,7 +40,7 @@ beforeEach(function (): void {
     $this->safe = Account::factory()->create(['name' => 'Main safe']);
 
     $this->manager = User::factory()->create();
-    $this->manager->assignRole(Role::Administrator->value);
+    $this->manager->assignRole(Role::Owner->value);
 
     $this->client = Counterparty::factory()->create(['name' => 'Salem']);
 });

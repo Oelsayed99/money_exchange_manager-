@@ -36,10 +36,10 @@ beforeEach(function (): void {
     $this->posting = app(PostingService::class);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
     $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
+    $this->viewer->assignRole(Role::Owner->value);
 });
 
 function record(TransactionType $type, array $overrides = []): Transaction

@@ -22,7 +22,7 @@ beforeEach(function (): void {
     $this->eur = Currency::query()->where('code', 'EUR')->sole();
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 });
 
 function solve(array $payload): TestResponse
@@ -37,7 +37,6 @@ describe('authorization', function (): void {
 
     it('refuses a viewer', function (): void {
         $viewer = User::factory()->create();
-        $viewer->assignRole(Role::Viewer->value);
 
         $this->actingAs($viewer)->postJson('/exchange/convert', [])->assertForbidden();
     });

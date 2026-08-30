@@ -52,7 +52,7 @@ function booksFor(string $name, string $client, string $amount): array
         $party = Counterparty::factory()->create(['name' => $client]);
 
         $owner = User::factory()->create(['business_id' => $business->getKey()]);
-        $owner->assignRole(Role::Administrator->value);
+        $owner->assignRole(Role::Owner->value);
 
         app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
             type: TransactionType::In,

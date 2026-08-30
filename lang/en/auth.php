@@ -83,4 +83,11 @@ return [
         'resend' => 'Resend verification email',
         'log_out' => 'Log out',
     ],
+
+    'social_failed' => 'That sign-in could not be completed. Try again, or use your email address and password.',
+    'social_unavailable' => 'That way of signing in is not available here.',
+    'providers' => [
+        'google' => 'Continue with Google',
+        'apple' => 'Continue with Apple',
+    ],
 ];

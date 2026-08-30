@@ -57,7 +57,7 @@ final class E2eSeeder extends Seeder
             'password' => Hash::make(self::PASSWORD),
             'email_verified_at' => now(),
         ]);
-        $owner->assignRole(Role::Administrator->value);
+        $owner->assignRole(Role::Owner->value);
 
         $clerk = User::query()->create([
             'name' => 'E2E Clerk',
@@ -65,7 +65,7 @@ final class E2eSeeder extends Seeder
             'password' => Hash::make(self::PASSWORD),
             'email_verified_at' => now(),
         ]);
-        $clerk->assignRole(Role::Operator->value);
+        $clerk->assignRole(Role::Owner->value);
 
         $egp = Currency::query()->where('code', 'EGP')->sole();
         $usd = Currency::query()->where('code', 'USD')->sole();

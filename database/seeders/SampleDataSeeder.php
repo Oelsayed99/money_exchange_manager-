@@ -125,7 +125,7 @@ final class SampleDataSeeder extends Seeder
      */
     private function users(): void
     {
-        foreach ([Role::Operator, Role::Viewer] as $role) {
+        foreach ([Role::Owner, Role::Owner] as $role) {
             $user = User::query()->firstOrCreate(
                 ['email' => $role->value.'@monymonk.test'],
                 [

@@ -7,19 +7,24 @@ namespace App\Enums;
 /**
  * Roles recognised by the application.
  *
- * Deliberately few. This is an internal system with a small number of people, and a
- * role matrix nobody can hold in their head is a matrix nobody audits.
+ * One, now. The system used to be a single office's books worked by a few named people,
+ * so it distinguished an administrator from an operator from a viewer. Online it is one
+ * set of books per sign-up, and the person who signed up owns theirs outright — there
+ * is nobody else in them to be told apart from.
+ *
+ * The permission plumbing stays. Each ability is still granted explicitly and checked
+ * at the gate, so an office that later wants a clerk who can record but not reverse can
+ * have one by adding a case here; nothing above this file has to change for that.
+ *
+ * What is gone is the old bootstrap rule, under which the first account became an
+ * administrator and every account after it a viewer. Once books are per business that
+ * rule is not merely obsolete, it is wrong: it made the second person to sign up a
+ * read-only spectator of the first person's business.
  */
 enum Role: string
 {
-    /** Full access, including reference data that the ledger depends on. */
-    case Administrator = 'administrator';
-
-    /** Day-to-day work. Reads reference data; cannot change what money means. */
-    case Operator = 'operator';
-
-    /** Read-only. */
-    case Viewer = 'viewer';
+    /** The person who signed up. Everything, within their own books and nowhere else. */
+    case Owner = 'owner';
 
     /** @return list<string> */
     public static function values(): array
@@ -30,44 +35,16 @@ enum Role: string
     /**
      * Permissions granted to this role.
      *
-     * Administrator is intentionally *not* special-cased through a Gate::before
-     * bypass. It is granted every permission explicitly, so "what can an administrator
-     * do" is answerable by reading the permission table rather than by reading code.
-     * The seeder re-syncs on every run, so a newly added permission is picked up.
+     * Granted explicitly rather than through a `Gate::before` bypass, so "what can an
+     * owner do" is answerable by reading the permission table rather than by reading
+     * code. The seeder re-syncs on every run, so a newly added permission is picked up.
      *
      * @return list<Permission>
      */
     public function permissions(): array
     {
         return match ($this) {
-            self::Administrator => Permission::cases(),
-            // An operator works with parties and locations daily but does not get to
-            // redefine what money means, so reference data stays read-only.
-            self::Operator => [
-                Permission::ViewCurrencies,
-                Permission::ViewAccounts,
-                Permission::ManageAccounts,
-                Permission::ViewCounterparties,
-                Permission::ManageCounterparties,
-                // An operator records and posts the day's work, and may discard their
-                // own unfinished drafts. Reversing something already in the ledger is
-                // a correction to history and stays with an administrator.
-                Permission::ViewTransactions,
-                Permission::RecordTransactions,
-                Permission::PostTransactions,
-                Permission::DeleteDraftTransactions,
-                // Counting a safe is day-to-day work, and the person who counts it is
-                // the person who knows why it disagrees.
-                Permission::ViewReconciliations,
-                Permission::ManageReconciliations,
-            ],
-            self::Viewer => [
-                Permission::ViewCurrencies,
-                Permission::ViewAccounts,
-                Permission::ViewCounterparties,
-                Permission::ViewTransactions,
-                Permission::ViewReconciliations,
-            ],
+            self::Owner => Permission::cases(),
         };
     }
 }

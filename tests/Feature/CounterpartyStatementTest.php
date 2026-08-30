@@ -37,7 +37,7 @@ beforeEach(function (): void {
     $this->rules = app(PostingRules::class);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 });
 
 /** Money arriving from the party and staying with us: their credit grows. */

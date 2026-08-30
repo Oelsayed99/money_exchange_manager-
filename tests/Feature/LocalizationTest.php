@@ -178,7 +178,7 @@ describe('fallback', function (): void {
     it('translates validation messages into Arabic', function (): void {
         // Needs the permission to manage currencies, or authorization rejects the
         // request before any validation message is produced.
-        $user = userWithRole(Role::Administrator);
+        $user = userWithRole(Role::Owner);
         $user->update(['locale' => 'ar']);
 
         $response = $this->actingAs($user)

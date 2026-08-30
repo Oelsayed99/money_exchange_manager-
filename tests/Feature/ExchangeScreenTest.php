@@ -30,10 +30,9 @@ beforeEach(function (): void {
     $this->usdSafe = Account::factory()->create(['name' => 'USD safe']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
-    $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
+    $this->stranger = User::factory()->create();
 });
 
 /** The real deal: 2,574,000 EGP in for 50,000 USD out, cost 51.20. */
@@ -60,9 +59,9 @@ describe('authorization', function (): void {
         $this->get('/exchange')->assertRedirect('/login');
     });
 
-    it('refuses a viewer', function (): void {
-        $this->actingAs($this->viewer)->get('/exchange')->assertForbidden();
-        $this->actingAs($this->viewer)->post('/exchange', dealPayload())->assertForbidden();
+    it('refuses somebody holding no role', function (): void {
+        $this->actingAs($this->stranger)->get('/exchange')->assertForbidden();
+        $this->actingAs($this->stranger)->post('/exchange', dealPayload())->assertForbidden();
     });
 
     it('lets an operator record a deal', function (): void {

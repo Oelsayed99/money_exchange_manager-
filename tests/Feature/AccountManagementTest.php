@@ -23,10 +23,11 @@ beforeEach(function (): void {
     $this->aed = Currency::query()->where('code', 'AED')->sole();
 
     $this->manager = User::factory()->create();
-    $this->manager->assignRole(Role::Administrator->value);
+    $this->manager->assignRole(Role::Owner->value);
 
-    $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
+    // Holds no role at all. With one role in the system, "not the owner" is what
+    // that means, and the assertion worth making is that the gate fails closed.
+    $this->stranger = User::factory()->create();
 });
 
 /** @param array<string, mixed> $overrides */
@@ -51,10 +52,10 @@ describe('authorization', function (): void {
         $this->get('/accounts')->assertRedirect('/login');
     });
 
-    it('lets a viewer read but not create', function (): void {
-        $this->actingAs($this->viewer)->get('/accounts')->assertOk();
-        $this->actingAs($this->viewer)->get('/accounts/create')->assertForbidden();
-        $this->actingAs($this->viewer)->post('/accounts', accountPayload())->assertForbidden();
+    it('refuses somebody holding no role, reading or writing', function (): void {
+        $this->actingAs($this->stranger)->get('/accounts')->assertForbidden();
+        $this->actingAs($this->stranger)->get('/accounts/create')->assertForbidden();
+        $this->actingAs($this->stranger)->post('/accounts', accountPayload())->assertForbidden();
     });
 
     it('refuses a user with no role at all', function (): void {

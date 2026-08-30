@@ -37,7 +37,7 @@ beforeEach(function (): void {
     $this->query = app(DashboardQuery::class);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 });
 
 function party(string $name): Counterparty

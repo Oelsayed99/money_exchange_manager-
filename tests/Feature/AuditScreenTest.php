@@ -17,10 +17,10 @@ beforeEach(function (): void {
     app(CurrencyRegistry::class)->flush();
 
     $this->admin = User::factory()->create(['name' => 'Owner']);
-    $this->admin->assignRole(Role::Administrator->value);
+    $this->admin->assignRole(Role::Owner->value);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 });
 
 describe('who may read it', function (): void {
@@ -31,15 +31,8 @@ describe('who may read it', function (): void {
     // The trail carries IP addresses, user agents and other people's changes. Reading
     // it is a different kind of act from reading the ledger, so it is not day-to-day
     // work — an operator and a viewer are both refused.
-    it('refuses an operator', function (): void {
-        $this->actingAs($this->operator)->get('/audit')->assertForbidden();
-    });
-
-    it('refuses a viewer', function (): void {
-        $viewer = User::factory()->create();
-        $viewer->assignRole(Role::Viewer->value);
-
-        $this->actingAs($viewer)->get('/audit')->assertForbidden();
+    it('refuses somebody holding no role', function (): void {
+        $this->actingAs(User::factory()->create())->get('/audit')->assertForbidden();
     });
 
     it('lets an administrator read it', function (): void {

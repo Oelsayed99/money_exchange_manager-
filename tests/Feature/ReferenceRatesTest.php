@@ -30,7 +30,7 @@ beforeEach(function (): void {
     config()->set('services.rates.base', 'USD');
 
     $this->user = User::factory()->create();
-    $this->user->assignRole(Role::Administrator->value);
+    $this->user->assignRole(Role::Owner->value);
 });
 
 function ratesBody(string $rates = '"USD":1,"EGP":50.252612,"EUR":0.861354,"AED":3.6725'): string

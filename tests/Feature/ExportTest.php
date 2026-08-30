@@ -29,7 +29,7 @@ beforeEach(function (): void {
     $this->client = Counterparty::factory()->create(['name' => 'سالم التجريبي']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
     app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
         type: TransactionType::In,

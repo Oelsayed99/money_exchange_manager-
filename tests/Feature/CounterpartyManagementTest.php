@@ -21,10 +21,10 @@ beforeEach(function (): void {
     $this->egp = Currency::query()->where('code', 'EGP')->sole();
 
     $this->manager = User::factory()->create();
-    $this->manager->assignRole(Role::Administrator->value);
+    $this->manager->assignRole(Role::Owner->value);
 
-    $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
+    // Holds no role at all: the gate has to fail closed.
+    $this->stranger = User::factory()->create();
 });
 
 /** @param array<string, mixed> $overrides */
@@ -48,9 +48,9 @@ describe('authorization', function (): void {
         $this->get('/counterparties')->assertRedirect('/login');
     });
 
-    it('lets a viewer read but not create', function (): void {
-        $this->actingAs($this->viewer)->get('/counterparties')->assertOk();
-        $this->actingAs($this->viewer)->post('/counterparties', partyPayload())->assertForbidden();
+    it('refuses somebody holding no role, reading or writing', function (): void {
+        $this->actingAs($this->stranger)->get('/counterparties')->assertForbidden();
+        $this->actingAs($this->stranger)->post('/counterparties', partyPayload())->assertForbidden();
     });
 
     it('exposes no destroy route', function (): void {

@@ -36,7 +36,7 @@ beforeEach(function (): void {
     $this->egp = Currency::query()->where('code', 'EGP')->sole();
 
     $this->manager = User::factory()->create();
-    $this->manager->assignRole(Role::Administrator->value);
+    $this->manager->assignRole(Role::Owner->value);
 });
 
 /** @param  list<array<string, string|int>>  $positions */

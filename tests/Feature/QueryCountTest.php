@@ -40,7 +40,7 @@ beforeEach(function (): void {
     $this->safe = Account::factory()->create(['name' => 'Safe']);
 
     $this->admin = User::factory()->create();
-    $this->admin->assignRole(Role::Administrator->value);
+    $this->admin->assignRole(Role::Owner->value);
 
     $this->rules = app(PostingRules::class);
     $this->posting = app(PostingService::class);

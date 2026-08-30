@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Auth\GoogleProvider;
+
 return [
 
     /*
@@ -50,6 +52,27 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+    ],
+
+    /*
+     * Signing in through somebody else.
+     *
+     * A provider with no client id simply does not appear on the sign-in screen — see
+     * SocialAuthController::available() — so this file is the whole of what turns
+     * Google on. Apple is listed the day its credentials exist and an AppleProvider is
+     * written; nothing else has to change for it.
+     */
+    'social_providers' => [
+        GoogleProvider::class,
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+
+        // Left empty, the callback route is used, which is right in every environment
+        // where APP_URL is right. Set it only when a proxy makes them differ.
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
 ];

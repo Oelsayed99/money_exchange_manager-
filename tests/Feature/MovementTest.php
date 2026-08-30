@@ -28,10 +28,10 @@ beforeEach(function (): void {
     $this->party = Counterparty::factory()->create(['name' => 'سالم التجريبي']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
+    // No role at all: the gate must fail closed.
     $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
 });
 
 function movementPayload(array $overrides = []): array

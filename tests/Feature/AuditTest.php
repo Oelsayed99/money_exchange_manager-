@@ -80,7 +80,7 @@ describe('attribution', function (): void {
         $this->seed(RolePermissionSeeder::class);
 
         $user = User::factory()->create(['email' => 'clerk@example.com']);
-        $user->assignRole(Role::Administrator->value);
+        $user->assignRole(Role::Owner->value);
 
         $this->actingAs($user)->post('/currencies', [
             'code' => 'KWD',
