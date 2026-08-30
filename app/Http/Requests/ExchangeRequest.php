@@ -7,6 +7,7 @@ namespace App\Http\Requests;
 use App\Domain\Exchange\ExchangeInput;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Enums\MarginBasis;
 use App\Enums\MovementMethod;
 use App\Enums\ProfitMethod;
@@ -39,13 +40,13 @@ final class ExchangeRequest extends FormRequest
         return [
             'occurred_at' => ['required', 'date'],
 
-            'received_currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'received_currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'received_amount' => ['required', 'string'],
-            'received_into_id' => ['required', 'integer', Rule::exists('accounts', 'id')->whereNull('deleted_at')],
+            'received_into_id' => ['required', 'integer', Owned::exists('accounts', 'id')->whereNull('deleted_at')],
 
-            'delivered_currency_id' => ['required', 'integer', 'different:received_currency_id', Rule::exists('currencies', 'id')],
+            'delivered_currency_id' => ['required', 'integer', 'different:received_currency_id', Owned::exists('currencies', 'id')],
             'delivered_amount' => ['required', 'string'],
-            'delivered_from_id' => ['required', 'integer', Rule::exists('accounts', 'id')->whereNull('deleted_at')],
+            'delivered_from_id' => ['required', 'integer', Owned::exists('accounts', 'id')->whereNull('deleted_at')],
 
             'profit_method' => ['required', Rule::enum(ProfitMethod::class)],
             'margin_basis' => ['nullable', Rule::enum(MarginBasis::class)],
@@ -56,7 +57,7 @@ final class ExchangeRequest extends FormRequest
             'expenses' => ['nullable', 'string'],
             'commissions' => ['nullable', 'string'],
 
-            'counterparty_id' => ['nullable', 'integer', Rule::exists('counterparties', 'id')->whereNull('deleted_at')],
+            'counterparty_id' => ['nullable', 'integer', Owned::exists('counterparties', 'id')->whereNull('deleted_at')],
             'method' => ['nullable', Rule::enum(MovementMethod::class)],
             'reference' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],

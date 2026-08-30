@@ -8,6 +8,7 @@ use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
 use App\Http\Requests\MovementRequest;
@@ -60,8 +61,8 @@ final class MovementController extends Controller
         Gate::authorize('create', Transaction::class);
 
         $validated = $request->validate([
-            'counterparty_id' => ['required', 'integer', Rule::exists('counterparties', 'id')],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'counterparty_id' => ['required', 'integer', Owned::exists('counterparties', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'type' => ['nullable', Rule::enum(TransactionType::class)],
             'amount' => ['nullable', 'string'],
         ]);

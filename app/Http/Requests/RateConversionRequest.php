@@ -7,11 +7,11 @@ namespace App\Http\Requests;
 use App\Domain\Exchange\RateQuote;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Models\Currency;
 use App\Models\Transaction;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
@@ -40,8 +40,8 @@ final class RateConversionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'base_currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
-            'quote_currency_id' => ['required', 'integer', 'different:base_currency_id', Rule::exists('currencies', 'id')],
+            'base_currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
+            'quote_currency_id' => ['required', 'integer', 'different:base_currency_id', Owned::exists('currencies', 'id')],
             'rate' => ['nullable', 'string'],
             'base_amount' => ['nullable', 'string'],
             'quote_amount' => ['nullable', 'string'],

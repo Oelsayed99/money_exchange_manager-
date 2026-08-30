@@ -6,9 +6,9 @@ namespace App\Domain\Reporting;
 
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\ScopedQuery;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\LedgerOwnerType;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Where every counterparty stands, from the ledger.
@@ -22,7 +22,10 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class CounterpartyStandings
 {
-    public function __construct(private CurrencyRegistry $currencies) {}
+    public function __construct(
+        private CurrencyRegistry $currencies,
+        private ScopedQuery $scoped,
+    ) {}
 
     /**
      * @param  list<int>  $counterpartyIds
@@ -36,7 +39,7 @@ final readonly class CounterpartyStandings
 
         // The query builder rather than the model: this is a joined read model, and an
         // Eloquent row would apply the model's casts to columns that are not its own.
-        $rows = DB::table('ledger_accounts')
+        $rows = $this->scoped->table('ledger_accounts')
             ->join('ledger_balances', 'ledger_balances.ledger_account_id', '=', 'ledger_accounts.id')
             ->where('ledger_accounts.owner_type', LedgerOwnerType::Counterparty->value)
             ->whereIn('ledger_accounts.owner_id', $counterpartyIds)

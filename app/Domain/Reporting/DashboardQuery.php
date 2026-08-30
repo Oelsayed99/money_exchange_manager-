@@ -6,6 +6,7 @@ namespace App\Domain\Reporting;
 
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\ScopedQuery;
 use App\Enums\CounterpartyStatus;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
@@ -38,7 +39,10 @@ final class DashboardQuery
     /** Enough to see the shape of the book without turning the chart into a wall. */
     private const int TOP_CLIENTS = 8;
 
-    public function __construct(private readonly CurrencyRegistry $currencies) {}
+    public function __construct(
+        private readonly CurrencyRegistry $currencies,
+        private readonly ScopedQuery $scoped,
+    ) {}
 
     public function run(DashboardFilters $filters): Dashboard
     {
@@ -223,7 +227,7 @@ final class DashboardQuery
      */
     private function cashOnHand(DashboardFilters $filters): array
     {
-        $rows = DB::table('ledger_accounts')
+        $rows = $this->scoped->table('ledger_accounts')
             ->join('ledger_balances', 'ledger_balances.ledger_account_id', '=', 'ledger_accounts.id')
             ->where('ledger_accounts.subkind', LedgerAccountSubkind::Cash->value)
             ->when(
@@ -492,7 +496,7 @@ final class DashboardQuery
     /** Counterparty-owned ledger accounts, narrowed by whichever filters apply. */
     private function counterpartyAccounts(DashboardFilters $filters): BuilderContract
     {
-        return DB::table('ledger_accounts')
+        return $this->scoped->table('ledger_accounts')
             ->where('ledger_accounts.owner_type', LedgerOwnerType::Counterparty->value)
             ->when(
                 $filters->counterparty !== null,
@@ -507,7 +511,7 @@ final class DashboardQuery
     /** Posted transactions carrying a margin, narrowed by whichever filters apply. */
     private function postedTransactions(DashboardFilters $filters): BuilderContract
     {
-        return DB::table('transactions')
+        return $this->scoped->table('transactions')
             ->where('status', TransactionStatus::Posted->value)
             ->whereNotNull('profit_currency_id')
             ->when(

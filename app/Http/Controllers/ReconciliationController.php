@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
 use App\Domain\Reconciliation\ReconciliationService;
+use App\Domain\Tenancy\Owned;
 use App\Enums\ReconciliationStatus;
 use App\Models\Account;
 use App\Models\Currency;
@@ -39,8 +40,8 @@ final class ReconciliationController extends Controller
         Gate::authorize('viewAny', Reconciliation::class);
 
         $validated = $request->validate([
-            'account' => ['nullable', 'integer', Rule::exists('accounts', 'id')],
-            'currency' => ['nullable', 'string', Rule::exists('currencies', 'code')],
+            'account' => ['nullable', 'integer', Owned::exists('accounts', 'id')],
+            'currency' => ['nullable', 'string', Owned::exists('currencies', 'code')],
             'status' => ['nullable', Rule::enum(ReconciliationStatus::class)],
         ]);
 
@@ -84,8 +85,8 @@ final class ReconciliationController extends Controller
         Gate::authorize('create', Reconciliation::class);
 
         $validated = $request->validate([
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'account_id' => ['required', 'integer', Owned::exists('accounts', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'as_of' => ['required', 'date'],
         ]);
 
@@ -103,8 +104,8 @@ final class ReconciliationController extends Controller
         Gate::authorize('create', Reconciliation::class);
 
         $validated = $request->validate([
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'account_id' => ['required', 'integer', Owned::exists('accounts', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'as_of' => ['required', 'date', 'before_or_equal:today'],
             'counted_amount' => ['required', 'string'],
             'note' => ['nullable', 'string', 'max:2000'],
@@ -151,7 +152,7 @@ final class ReconciliationController extends Controller
 
         $validated = $request->validate([
             'resolution' => ['required', 'string', 'max:2000'],
-            'adjustment_transaction_id' => ['nullable', 'integer', Rule::exists('transactions', 'id')],
+            'adjustment_transaction_id' => ['nullable', 'integer', Owned::exists('transactions', 'id')],
         ]);
 
         if ($reconciliation->isBalanced()) {

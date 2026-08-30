@@ -8,6 +8,7 @@ use App\Domain\Audit\Auditable;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
 use App\Enums\AccountType;
+use App\Models\Concerns\BelongsToBusiness;
 use Database\Factories\AccountFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -40,6 +41,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 final class Account extends Model
 {
     use Auditable;
+    use BelongsToBusiness;
 
     /** @use HasFactory<AccountFactory> */
     use HasFactory;

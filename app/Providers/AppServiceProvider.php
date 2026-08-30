@@ -8,6 +8,7 @@ use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Rates\ExchangeRateApi;
 use App\Domain\Rates\RateProvider;
+use App\Domain\Tenancy\CurrentBusiness;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -32,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
          */
         $this->app->singleton(CurrencyRegistry::class);
         $this->app->singleton(LedgerAccountResolver::class);
+
+        /*
+         * Whose books are open. One instance or none — a second copy would be a second
+         * answer to that question, and the global scope reads whichever it happens to
+         * resolve. Registered here rather than left to the container's default, which
+         * builds a fresh object per resolution and would leave every scope unbound.
+         */
+        $this->app->singleton(CurrentBusiness::class);
 
         // One implementation today; an interface because a business quoting intraday
         // will want an hourly feed behind a key, and that should be a line here.

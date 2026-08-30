@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ResolveBusiness;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
+            // Before everything that reads data: no model belonging to a business can
+            // be queried until this has said whose books are open.
+            ResolveBusiness::class,
+
             // Must run before HandleInertiaRequests so that shared props — including
             // the translation bundle — are built against the resolved locale.
             SetLocale::class,

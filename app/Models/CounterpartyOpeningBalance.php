@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Casts\MoneyCast;
 use App\Domain\Money\Money;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -22,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class CounterpartyOpeningBalance extends Model
 {
+    use BelongsToBusiness;
+
     protected $table = 'counterparty_opening_balances';
 
     protected $fillable = [

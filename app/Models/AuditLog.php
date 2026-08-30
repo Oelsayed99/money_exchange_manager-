@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -32,6 +33,21 @@ use RuntimeException;
  */
 final class AuditLog extends Model
 {
+    use BelongsToBusiness;
+
+    /**
+     * The one table that may hold a row belonging to no business.
+     *
+     * Sign-up writes an audit line for the creation of the business itself, before
+     * there is a business to attribute it to. Those lines carry a null and are
+     * therefore invisible to every business's audit screen, which is right: they are
+     * platform events, not entries in anybody's books.
+     */
+    protected static function businessMayBeAbsent(): bool
+    {
+        return true;
+    }
+
     /** Rows carry a creation time and nothing else; they are never modified. */
     public const UPDATED_AT = null;
 

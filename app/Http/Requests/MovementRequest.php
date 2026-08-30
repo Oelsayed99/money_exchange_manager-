@@ -7,6 +7,7 @@ namespace App\Http\Requests;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
 use App\Models\Account;
@@ -50,21 +51,21 @@ final class MovementRequest extends FormRequest
                 ),
             ],
             'occurred_at' => ['required', 'date'],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'amount' => ['required', 'string'],
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->whereNull('deleted_at')],
+            'account_id' => ['required', 'integer', Owned::exists('accounts', 'id')->whereNull('deleted_at')],
 
             'destination_account_id' => [
                 $type?->needsDestinationAccount() === true ? 'required' : 'nullable',
                 'integer',
                 'different:account_id',
-                Rule::exists('accounts', 'id')->whereNull('deleted_at'),
+                Owned::exists('accounts', 'id')->whereNull('deleted_at'),
             ],
 
             'counterparty_id' => [
                 $type?->needsCounterparty() === true ? 'required' : 'nullable',
                 'integer',
-                Rule::exists('counterparties', 'id')->whereNull('deleted_at'),
+                Owned::exists('counterparties', 'id')->whereNull('deleted_at'),
             ],
 
             // The money that actually changed hands, when it was not the currency the
@@ -72,7 +73,7 @@ final class MovementRequest extends FormRequest
             'cash_currency_id' => [
                 $type?->mayConvert() === true ? 'nullable' : 'prohibited',
                 'integer',
-                Rule::exists('currencies', 'id'),
+                Owned::exists('currencies', 'id'),
             ],
             'cash_amount' => ['nullable', 'required_with:cash_currency_id', 'string'],
             'rate' => ['nullable', 'required_with:cash_currency_id', 'string'],

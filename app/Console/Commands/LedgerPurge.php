@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Models\Business;
 use Illuminate\Console\Command;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
@@ -33,7 +35,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class LedgerPurge extends Command
 {
+    private Business $business;
+
     protected $signature = 'ledger:purge
+        {--business= : Whose movements to delete, by id or by name. Required once there is more than one}
         {--force : Do not ask for confirmation}
         {--openings : Also clear counterparty opening balances}
         {--skip-backup : Do not back the database up first (not advised)}';
@@ -97,10 +102,21 @@ final class LedgerPurge extends Command
 
     public function handle(): int
     {
+        $business = $this->whoseBooks();
+
+        if (! $business instanceof Business) {
+            return self::FAILURE;
+        }
+
+        $this->business = $business;
+
         $database = (string) DB::connection()->getDatabaseName();
         $counts = $this->counts();
 
-        $this->warn("This deletes every recorded movement in [{$database}]. It cannot be undone.");
+        $this->warn(
+            "This deletes every recorded movement belonging to [{$business->name}] in "
+            ."[{$database}]. It cannot be undone."
+        );
         $this->newLine();
         $this->table(['Table', 'Rows'], array_map(
             fn (string $table): array => [$table, $counts[$table]],
@@ -142,11 +158,11 @@ final class LedgerPurge extends Command
         try {
             DB::transaction(function (): void {
                 foreach (self::TABLES as $table) {
-                    DB::table($table)->delete();
+                    $this->rowsOf($table)->delete();
                 }
 
                 if ($this->option('openings')) {
-                    DB::table('counterparty_opening_balances')->delete();
+                    $this->rowsOf('counterparty_opening_balances')->delete();
                 }
             });
         } finally {
@@ -175,13 +191,72 @@ final class LedgerPurge extends Command
         $counts = [];
 
         foreach (self::TABLES as $table) {
-            $counts[$table] = DB::table($table)->count();
+            $counts[$table] = $this->rowsOf($table)->count();
         }
 
         if ($this->option('openings')) {
-            $counts['counterparty_opening_balances'] = DB::table('counterparty_opening_balances')->count();
+            $counts['counterparty_opening_balances'] = $this->rowsOf('counterparty_opening_balances')->count();
         }
 
         return $counts;
+    }
+
+    /**
+     * One table, narrowed to the business being purged.
+     *
+     * The reason this command takes a business at all. Before books were kept per
+     * business there was only ever one set to erase; now an unqualified delete here
+     * would empty every customer's ledger at once, and the triggers are off while it
+     * runs.
+     */
+    private function rowsOf(string $table): Builder
+    {
+        return DB::table($table)->where('business_id', $this->business->getKey());
+    }
+
+    /**
+     * Which business to purge.
+     *
+     * With one business, that one, and the command behaves exactly as it did before
+     * any of this existed. With several, saying so is required: there is no sensible
+     * default for which customer's ledger to erase.
+     */
+    private function whoseBooks(): ?Business
+    {
+        $named = $this->option('business');
+
+        if (is_string($named) && $named !== '') {
+            $business = Business::query()
+                ->where(fn ($q) => $q->where('id', $named)->orWhere('name', $named))
+                ->first();
+
+            if (! $business instanceof Business) {
+                $this->error("No business matches [{$named}].");
+            }
+
+            return $business;
+        }
+
+        $all = Business::query()->orderBy('id')->get();
+
+        if ($all->count() === 1) {
+            return $all->first();
+        }
+
+        if ($all->isEmpty()) {
+            $this->error('There are no businesses, so there is nothing to purge.');
+
+            return null;
+        }
+
+        $this->error(
+            'There is more than one business here. Say which one with --business=, by id or '
+            .'by name. There is no default: this deletes a customer\'s ledger.'
+        );
+
+        $this->newLine();
+        $this->table(['Id', 'Name'], $all->map(fn (Business $b): array => [$b->getKey(), $b->name])->all());
+
+        return null;
     }
 }

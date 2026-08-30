@@ -8,6 +8,7 @@ use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\ScopedQuery;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\LedgerOwnerType;
@@ -45,6 +46,7 @@ final class ReconciliationService
     public function __construct(
         private readonly LedgerAccountResolver $accounts,
         private readonly CurrencyRegistry $currencies,
+        private readonly ScopedQuery $scoped,
     ) {}
 
     /**
@@ -182,7 +184,7 @@ final class ReconciliationService
             return [];
         }
 
-        $rows = DB::table('reconciliations as r')
+        $rows = $this->scoped->table('reconciliations', 'r')
             ->join('ledger_accounts as a', function ($join): void {
                 $join->on('a.owner_id', '=', 'r.account_id')
                     ->on('a.currency_id', '=', 'r.currency_id')

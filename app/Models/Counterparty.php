@@ -8,6 +8,7 @@ use App\Domain\Audit\Auditable;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
 use App\Enums\CounterpartyType;
+use App\Models\Concerns\BelongsToBusiness;
 use Database\Factories\CounterpartyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -37,6 +38,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 final class Counterparty extends Model
 {
     use Auditable;
+    use BelongsToBusiness;
 
     /** @use HasFactory<CounterpartyFactory> */
     use HasFactory;

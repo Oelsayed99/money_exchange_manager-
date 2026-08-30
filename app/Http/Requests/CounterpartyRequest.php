@@ -6,6 +6,7 @@ namespace App\Http\Requests;
 
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Enums\CounterpartyType;
 use App\Models\Counterparty;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,11 +34,11 @@ final class CounterpartyRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:255'],
             'country' => ['nullable', 'string', 'size:2'],
-            'preferred_currency_id' => ['nullable', 'integer', Rule::exists('currencies', 'id')],
+            'preferred_currency_id' => ['nullable', 'integer', Owned::exists('currencies', 'id')],
             'is_active' => ['required', 'boolean'],
 
             'positions' => ['array'],
-            'positions.*.currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'positions.*.currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'positions.*.amount' => ['required', 'string'],
         ];
     }

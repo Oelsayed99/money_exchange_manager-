@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Casts\MoneyCast;
 use App\Domain\Money\Money;
 use App\Enums\EntryDirection;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -30,6 +31,8 @@ use RuntimeException;
  */
 final class LedgerEntry extends Model
 {
+    use BelongsToBusiness;
+
     public const UPDATED_AT = null;
 
     protected $fillable = [
