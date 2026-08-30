@@ -12,8 +12,8 @@ return [
     'description' => 'Where everything stands, and what moved.',
 
     /*
-     * The owner's three cases in their own words, plus the fourth the four-bucket
-     * model makes possible and which naming as either one would misrepresent.
+     * Which way a client's balances run. "Both ways" is possible because currencies
+     * are never added together: they can owe us dollars while we owe them pounds.
      */
     'statuses' => [
         'owes_us' => 'They owe us',
@@ -32,9 +32,9 @@ return [
         'cash_on_hand' => 'Cash on hand',
         'cash_on_hand_hint' => 'In our own custody locations. Not narrowed by client.',
         'owed_to_us' => 'Owed to us',
-        'owed_to_us_hint' => 'Receivables plus our money held by others.',
+        'owed_to_us_hint' => 'Every client balance that runs our way, added up per currency.',
         'owed_to_them' => 'Owed to them',
-        'owed_to_them_hint' => 'Payables plus client credit we are holding.',
+        'owed_to_them_hint' => 'Every client balance that runs their way, added up per currency.',
         'profit' => 'Margin earned',
         'profit_hint' => 'In the period shown, in the currency it was earned in.',
         'received' => 'In from clients',
@@ -67,7 +67,7 @@ return [
     ],
     'top' => [
         'title' => 'Largest positions',
-        'hint' => 'Both sides shown separately. A client can be on both, and the two are never netted.',
+        'hint' => 'The largest balances either way, in one currency. Currencies are never added together.',
     ],
 
     'parties' => [
