@@ -59,13 +59,14 @@ return new class extends Migration
     public function up(): void
     {
         $this->refuseIfAnyHistoryExists();
+        $this->retireTheFourPositions();
 
         $this->replaceCheck('ledger_accounts', 'chk_ledger_accounts_subkind', 'subkind', self::SUBKINDS);
         $this->replaceCheck('transactions', 'chk_transactions_type', 'type', self::TYPES);
 
         // The bucket was half of what made a position unique. Without it, a party has
         // one row per currency — which is the whole point.
-        DB::statement('ALTER TABLE counterparty_opening_balances DROP CHECK chk_counterparty_bucket');
+        $this->dropCheckIfPresent('counterparty_opening_balances', 'chk_counterparty_bucket');
 
         // The new index goes on before the old one comes off. MySQL refuses to drop an
         // index a foreign key is leaning on, and `counterparty_id` leads both.
@@ -118,7 +119,7 @@ return new class extends Migration
     /** @param  list<string>  $allowed */
     private function replaceCheck(string $table, string $constraint, string $column, array $allowed): void
     {
-        DB::statement("ALTER TABLE {$table} DROP CHECK {$constraint}");
+        $this->dropCheckIfPresent($table, $constraint);
 
         DB::statement(sprintf(
             "ALTER TABLE %s ADD CONSTRAINT %s CHECK (%s IN ('%s'))",
@@ -127,5 +128,47 @@ return new class extends Migration
             $column,
             implode("','", $allowed),
         ));
+    }
+
+    /**
+     * Accounts in the four subkinds this migration retires.
+     *
+     * The refusal above has already established that no entry was ever posted to them.
+     * What is left is what the account resolver created on demand and nothing wrote to;
+     * the new CHECK would reject those rows where they sit, and nothing reads them.
+     */
+    private function retireTheFourPositions(): void
+    {
+        $retired = ['custody', 'receivable', 'payable', 'credit_trust'];
+
+        $ids = DB::table('ledger_accounts')->whereIn('subkind', $retired)->pluck('id')->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        DB::table('ledger_balances')->whereIn('ledger_account_id', $ids)->delete();
+        DB::table('ledger_accounts')->whereIn('id', $ids)->delete();
+    }
+
+    /**
+     * MySQL has no `DROP CHECK IF EXISTS`.
+     *
+     * A database carried forward through development can be missing a constraint that a
+     * fresh install has — and then this migration, which is the one that would put it
+     * back, is the thing that fails. Dropping what is there and adding what should be
+     * leaves both databases in the same state.
+     */
+    private function dropCheckIfPresent(string $table, string $constraint): void
+    {
+        $present = DB::table('information_schema.TABLE_CONSTRAINTS')
+            ->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', $table)
+            ->where('CONSTRAINT_NAME', $constraint)
+            ->exists();
+
+        if ($present) {
+            DB::statement("ALTER TABLE {$table} DROP CHECK {$constraint}");
+        }
     }
 };
