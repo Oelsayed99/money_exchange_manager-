@@ -3,12 +3,12 @@ import { LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
+import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
-import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import { useTranslations } from '@/lib/i18n';
 
 type RegisterForm = {

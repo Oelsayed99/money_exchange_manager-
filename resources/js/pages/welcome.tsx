@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/lib/i18n';
 import { type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeftRight, FileText, Lock, Scale, Languages, Wallet } from 'lucide-react';
+import { ArrowLeftRight, FileText, Languages, Lock, Scale, Wallet } from 'lucide-react';
 
 /**
  * The front door.

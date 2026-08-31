@@ -288,11 +288,7 @@ function PartyBalance({ party }: { party: PartyRow }) {
                 return (
                     <div key={code} className="flex flex-wrap items-baseline gap-2">
                         <MoneyDisplay {...money} signed />
-                        <span
-                            className={
-                                'text-xs ' + (theyOweUs ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')
-                            }
-                        >
+                        <span className={'text-xs ' + (theyOweUs ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>
                             {theyOweUs ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
                         </span>
                     </div>

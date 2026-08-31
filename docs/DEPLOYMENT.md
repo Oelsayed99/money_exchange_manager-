@@ -67,13 +67,15 @@ git clone git@github.com:Oelsayed99/money_exchange_manager-.git /srv/finance
 cd /srv/finance
 composer install --no-dev --optimize-autoloader
 npm ci && npm run build
-cp .env.example .env
+cp .env.production.example .env
 php artisan key:generate
 ```
 
 ### `.env`
 
-The values that matter for this application specifically:
+Start from `.env.production.example`, then replace the domain and credentials. It
+already selects production-safe logging, encrypted HTTPS-only session cookies and a
+separate cache prefix. The values that matter most are:
 
 ```ini
 APP_ENV=production
@@ -86,6 +88,8 @@ DB_USERNAME=finance
 DB_PASSWORD=a-long-random-password
 
 SESSION_DRIVER=database
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
 
 # Registration sends a verification email, synchronously. Point this at a real
 # mailer, or leave it on `log` — see the note below.
@@ -224,29 +228,25 @@ sudo ufw enable
 
 MySQL (3306) is deliberately not on that list.
 
-## The first user registered becomes the administrator
+## Registration and businesses
 
-Read this twice.
+Registration is public by design. Every sign-up provisions a completely separate
+business and makes that person the owner of only those books. A later sign-up cannot
+see an earlier business, and this isolation is enforced by the application and its
+test suite.
 
-`RegisteredUserController` gives the **first** account created full administrator
-rights, and every account after it the read-only viewer role. This is deliberate — it is
-how you get in without a seeded password — and on a public server it means **whoever
-reaches `/register` first owns the system**.
-
-So, immediately after the site is reachable and before you tell anyone about it:
-
-1. Go to `https://finance.example.com/register` and create your account.
-2. Confirm you are the administrator: the sidebar shows **Audit trail**, which only an
-   administrator sees.
-
-Then create everyone else's account and set their role:
+There is currently no self-service invitation screen for adding another user to an
+existing business. Do not ask a colleague to use public registration for that purpose;
+it would create a new business. Once a user has been provisioned into the intended
+business by an administrator, set the role explicitly:
 
 ```bash
 php artisan user:role someone@example.com operator
 ```
 
-Registration remains open afterwards, and new accounts get the viewer role. If you would
-rather it were closed entirely, that is a small change and worth asking for.
+If this deployment is intended for one private office rather than as a multi-tenant
+service, restrict `/register` at the reverse proxy after the owner has signed up, or add
+an invitation-only registration policy before publishing the URL.
 
 ## Backups
 
@@ -300,7 +300,7 @@ composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php artisan migrate --force
 php artisan db:seed --class=RolePermissionSeeder --force
-php artisan config:cache && php artisan route:cache && php artisan view:cache
+php artisan optimize
 php artisan up
 ```
 

@@ -1,10 +1,10 @@
 import { MoneyDisplay } from '@/components/money-display';
-import { groupDigits } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
+import { groupDigits } from '@/lib/money';
 import type { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { AlertTriangle, Download, Printer, Sheet } from 'lucide-react';

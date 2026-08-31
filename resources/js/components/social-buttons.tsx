@@ -1,4 +1,5 @@
 import { useTranslations } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 export interface SocialProviderOption {
     name: string;
@@ -65,12 +66,10 @@ export function SocialButtons({ providers, disabled = false }: { providers: Soci
                         key={provider.name}
                         href={`/auth/${provider.name}/redirect`}
                         aria-disabled={disabled}
-                        className={
-                            'border-input bg-background hover:bg-accent focus-visible:ring-ring flex h-10 items-center ' +
-                            'justify-center gap-3 rounded-md border text-sm font-medium transition-colors ' +
-                            'focus-visible:ring-2 focus-visible:outline-none ' +
-                            (disabled ? 'pointer-events-none opacity-50' : '')
-                        }
+                        className={cn(
+                            'border-input bg-background hover:bg-accent focus-visible:ring-ring flex h-10 items-center justify-center gap-3 rounded-md border text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                            disabled && 'pointer-events-none opacity-50',
+                        )}
                     >
                         {provider.name === 'apple' ? <AppleMark /> : <GoogleMark />}
                         {provider.label}

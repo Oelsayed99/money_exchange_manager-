@@ -3,12 +3,12 @@ import { LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
+import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthLayout from '@/layouts/auth-layout';
-import { SocialButtons, type SocialProviderOption } from '@/components/social-buttons';
 import { useTranslations } from '@/lib/i18n';
 
 type LoginForm = {
@@ -83,8 +83,6 @@ export default function Login({ status, canResetPassword, providers = [] }: Logi
                         />
                         <InputError message={errors.password} />
                     </div>
-
-                    
 
                     <Button type="submit" className="mt-4 w-full" tabIndex={4} disabled={processing}>
                         {processing && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
