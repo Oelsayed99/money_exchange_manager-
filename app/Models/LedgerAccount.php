@@ -10,6 +10,7 @@ use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountKind;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\LedgerOwnerType;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -31,6 +32,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class LedgerAccount extends Model
 {
+    use BelongsToBusiness;
+
     protected $fillable = [
         'code',
         'subkind',

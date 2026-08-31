@@ -124,6 +124,30 @@ describe('losesPrecisionAt', function (): void {
     });
 });
 
+/**
+ * Presentation, not arithmetic. A rate lives in a `decimal(_, 12)` and comes back
+ * padded; a statement should print what the operator typed.
+ */
+describe('trimming the padding off a decimal', function (): void {
+    it('drops the zeros a fixed-scale column adds', function (string $value, string $expected): void {
+        expect(Decimal::trimTrailingZeros($value))->toBe($expected);
+    })->with([
+        ['50.850000000000', '50.85'],
+        ['50.000000000000', '50'],
+        ['0.000000000000', '0'],
+        ['-50.850000000000', '-50.85'],
+        ['0.019531000000', '0.019531'],
+    ]);
+
+    it('leaves a whole number and a value with nothing to drop alone', function (string $value): void {
+        expect(Decimal::trimTrailingZeros($value))->toBe($value);
+    })->with(['50', '0', '-50', '50.85', '0.019531']);
+
+    it('refuses anything that is not a decimal', function (): void {
+        expect(fn () => Decimal::trimTrailingZeros('fifty'))->toThrow(InvalidArgumentException::class);
+    });
+});
+
 describe('exactness', function (): void {
     // Documents why this class exists. IEEE-754 cannot represent these sums.
     it('avoids the float arithmetic it exists to replace', function (): void {

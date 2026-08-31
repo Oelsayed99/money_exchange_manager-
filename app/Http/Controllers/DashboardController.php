@@ -11,7 +11,7 @@ use App\Domain\Reporting\CounterpartyPosition;
 use App\Domain\Reporting\Dashboard;
 use App\Domain\Reporting\DashboardFilters;
 use App\Domain\Reporting\DashboardQuery;
-use App\Enums\BalanceBucket;
+use App\Domain\Tenancy\Owned;
 use App\Enums\CounterpartyStatus;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -38,8 +38,8 @@ final class DashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         $validated = $request->validate([
-            'counterparty' => ['nullable', 'integer', Rule::exists('counterparties', 'id')->whereNull('deleted_at')],
-            'currency' => ['nullable', 'string', Rule::exists('currencies', 'code')],
+            'counterparty' => ['nullable', 'integer', Owned::exists('counterparties', 'id')->whereNull('deleted_at')],
+            'currency' => ['nullable', 'string', Owned::exists('currencies', 'code')],
             'status' => ['nullable', Rule::enum(CounterpartyStatus::class)],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
@@ -82,13 +82,6 @@ final class DashboardController extends Controller
                         'label' => __('dashboard.statuses.'.$s->value),
                     ],
                     CounterpartyStatus::cases(),
-                ),
-                'buckets' => array_map(
-                    fn (BalanceBucket $b): array => [
-                        'value' => $b->value,
-                        'label' => __('counterparties.buckets.'.$b->value),
-                    ],
-                    BalanceBucket::cases(),
                 ),
             ],
         ]);
@@ -155,10 +148,8 @@ final class DashboardController extends Controller
                         fn (CounterpartyStatus $s): string => $s->value,
                         $party->statusByCurrency,
                     ),
-                    'positions' => array_map(
-                        fn (array $buckets): array => $this->amounts($buckets),
-                        $party->positions,
-                    ),
+                    // One signed balance per currency: positive means they owe us.
+                    'positions' => $this->amounts($party->positions),
                 ],
                 $dashboard->counterparties,
             ),

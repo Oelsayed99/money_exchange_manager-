@@ -6,7 +6,6 @@ use App\Domain\Exchange\ExchangeInput;
 use App\Domain\Exchange\ExchangeService;
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Models\Account;
 use App\Models\AuditLog;
 use App\Models\Counterparty;
@@ -39,8 +38,8 @@ beforeEach(function (): void {
     $this->client = Counterparty::factory()->create(['name' => 'Kept client']);
     $this->client->openingBalances()->create([
         'currency_id' => $this->egp->id,
-        'bucket' => BalanceBucket::CreditTrust,
-        'amount' => '899510',
+        'amount' => '-899510',
+        'posted_amount' => '0',
     ]);
 
     app(ExchangeService::class)->record(new ExchangeInput(

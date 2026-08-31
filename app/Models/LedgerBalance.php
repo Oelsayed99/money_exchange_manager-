@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Domain\Money\Money;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use RuntimeException;
@@ -24,6 +25,8 @@ use RuntimeException;
  */
 final class LedgerBalance extends Model
 {
+    use BelongsToBusiness;
+
     protected $fillable = [
         'ledger_account_id',
         'confirmed_amount',

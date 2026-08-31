@@ -23,6 +23,8 @@ return [
      * "Password" would quietly overwrite it.
      */
     'form' => [
+        'business_name' => 'Business name',
+        'business_name_placeholder' => 'Your exchange office',
         'name' => 'Name',
         'name_placeholder' => 'Full name',
         'email' => 'Email address',
@@ -83,4 +85,14 @@ return [
         'resend' => 'Resend verification email',
         'log_out' => 'Log out',
     ],
+
+    'social_failed' => 'That sign-in could not be completed. Try again, or use your email address and password.',
+    'social_unavailable' => 'That way of signing in is not available here.',
+    'providers' => [
+        'google' => 'Continue with Google',
+        'apple' => 'Continue with Apple',
+    ],
+
+    // The rule between the provider buttons and the form.
+    'or' => 'or',
 ];

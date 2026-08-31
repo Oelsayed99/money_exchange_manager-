@@ -22,7 +22,7 @@ interface TypeOption {
     needsCounterparty: boolean;
     needsDestinationAccount: boolean;
     needsBucket: boolean;
-    bucket: string | null;
+    mayConvert: boolean;
     increases: boolean | null;
 }
 
@@ -31,23 +31,16 @@ interface Props {
     accounts: { id: number; name: string }[];
     currencies: { id: number; code: string }[];
     counterparties: { id: number; name: string }[];
-    buckets: { value: string; label: string; position: string }[];
     methods: { value: string; label: string }[];
 }
 
-interface Positions {
-    positions: Record<string, MoneyPayload>;
-    after: { bucket: string; amount: MoneyPayload; increases: boolean } | null;
-    /** The bucket that would go below zero, or null. A warning, never a block. */
-    negative_warning: string | null;
-    /** A position on the same side that does hold money, and how to reach it. */
-    instead: {
-        bucket: string;
-        bucket_label: string;
-        amount: MoneyPayload;
-        type: string;
-        type_label: string;
-    } | null;
+/** Where the party stands, and where this movement would leave them. */
+interface Standing {
+    balance: MoneyPayload;
+    after: MoneyPayload | null;
+    they_owe_us: boolean;
+    /** Whether the relationship reads the other way once this is recorded. */
+    turns_over: boolean;
 }
 
 type MovementForm = {
@@ -58,7 +51,9 @@ type MovementForm = {
     account_id: string;
     destination_account_id: string;
     counterparty_id: string;
-    bucket: string;
+    cash_currency_id: string;
+    cash_amount: string;
+    rate: string;
     method: string;
     reference: string;
     description: string;
@@ -67,10 +62,10 @@ type MovementForm = {
 const selectClass =
     'border-input bg-background focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';
 
-export default function RecordMovement({ types, accounts, currencies, counterparties, buckets, methods }: Props) {
+export default function RecordMovement({ types, accounts, currencies, counterparties, methods }: Props) {
     const { t } = useTranslations();
 
-    const [state, setState] = useState<Positions | null>(null);
+    const [state, setState] = useState<Standing | null>(null);
 
     const { data, setData, post, processing, errors, reset } = useForm<MovementForm>({
         type: types[0]?.value ?? '',
@@ -80,15 +75,37 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
         account_id: String(accounts[0]?.id ?? ''),
         destination_account_id: '',
         counterparty_id: '',
-        bucket: '',
+        cash_currency_id: '',
+        cash_amount: '',
+        rate: '',
         method: '',
         reference: '',
         description: '',
     });
 
     const selected = types.find((type) => type.value === data.type);
+    const cashCode = currencies.find((c) => String(c.id) === data.cash_currency_id)?.code ?? '';
+
+    /*
+        What the client's side comes to, shown while it is being typed.
+
+        Only ever a preview. The figure that reaches the ledger is the one in the amount
+        field above — this multiplies to help the operator fill it in, and Section 16
+        keeps the arithmetic that matters on the server.
+    */
+    const converted =
+        data.cash_currency_id !== '' && data.cash_amount !== '' && data.rate !== '' && Number(data.rate) !== 0
+            ? (Number(data.cash_amount) * Number(data.rate)).toFixed(2)
+            : null;
+
+    // Clearing the currency clears what depended on it, so a half-filled conversion
+    // cannot be submitted by accident.
+    useEffect(() => {
+        if (data.cash_currency_id === '' && (data.cash_amount !== '' || data.rate !== '')) {
+            setData((current) => ({ ...current, cash_amount: '', rate: '' }));
+        }
+    }, [data.cash_currency_id, data.cash_amount, data.rate, setData]);
     const currencyCode = currencies.find((c) => String(c.id) === data.currency_id)?.code ?? '';
-    const bucketLabel = (bucket: string) => buckets.find((b) => b.value === bucket)?.position ?? bucket;
 
     /**
      * The counterparty's four positions, and what this movement would do to one.
@@ -121,7 +138,7 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                 signal: controller.signal,
             })
                 .then((response) => (response.ok ? response.json() : null))
-                .then((result: Positions | null) => setState(result))
+                .then((result: Standing | null) => setState(result))
                 .catch(() => undefined);
         }, 300);
 
@@ -160,9 +177,9 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                         </Field>
 
                         {/* What this type does, said in words before it is done. */}
-                        {selected?.bucket != null && (
+                        {selected?.increases != null && (
                             <p className="text-muted-foreground text-xs">
-                                {bucketLabel(selected.bucket)} {selected.increases === true ? t('movements.increases') : t('movements.decreases')}
+                                {selected.increases ? t('movements.increases') : t('movements.decreases')}
                             </p>
                         )}
 
@@ -185,6 +202,60 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                                     ))}
                                 </select>
                             </Field>
+
+                            {/*
+                                Recording in one currency what moved in another.
+
+                                Take 10,000 dollars and book it against the client as
+                                pounds at an agreed rate: the dollars really arrive, the
+                                client's account really moves in pounds, and both facts
+                                are kept. The amount above is the client's side; this is
+                                the money that actually changed hands.
+                            */}
+                            {selected?.mayConvert === true && (
+                                <div className="grid gap-3 rounded-lg border border-dashed p-3 sm:col-span-2 sm:grid-cols-3">
+                                    <p className="text-muted-foreground text-xs sm:col-span-3">{t('movements.convert_hint')}</p>
+
+                                    <Field label={t('movements.cash_amount')} htmlFor="cash_amount" error={errors.cash_amount}>
+                                        <MoneyInput
+                                            id="cash_amount"
+                                            value={data.cash_amount}
+                                            onChange={(v) => setData('cash_amount', v)}
+                                            currency={cashCode}
+                                        />
+                                    </Field>
+
+                                    <Field label={t('movements.cash_currency')} htmlFor="cash_currency_id" error={errors.cash_currency_id}>
+                                        <select
+                                            id="cash_currency_id"
+                                            value={data.cash_currency_id}
+                                            onChange={(e) => setData('cash_currency_id', e.target.value)}
+                                            className={selectClass}
+                                        >
+                                            <option value="">{t('movements.same_currency')}</option>
+                                            {currencies
+                                                .filter((currency) => String(currency.id) !== data.currency_id)
+                                                .map((currency) => (
+                                                    <option key={currency.id} value={currency.id}>
+                                                        {currency.code}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </Field>
+
+                                    <Field label={t('movements.rate')} htmlFor="rate" error={errors.rate}>
+                                        <MoneyInput id="rate" value={data.rate} onChange={(v) => setData('rate', v)} />
+                                    </Field>
+
+                                    {/* The figure that will be recorded, worked out where
+                                        the operator can see it before they commit. */}
+                                    {converted !== null && (
+                                        <p className="text-muted-foreground text-xs sm:col-span-3" dir="ltr">
+                                            {data.cash_amount} {cashCode} @ {data.rate} = {converted} {currencyCode}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             <Field label={t('movements.account')} htmlFor="account_id" error={errors.account_id}>
                                 <select
@@ -239,24 +310,6 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                                 </select>
                             </Field>
 
-                            {selected?.needsBucket === true && data.counterparty_id !== '' && (
-                                <Field label={t('movements.bucket')} htmlFor="bucket" error={errors.bucket}>
-                                    <select
-                                        id="bucket"
-                                        value={data.bucket}
-                                        onChange={(e) => setData('bucket', e.target.value)}
-                                        className={selectClass}
-                                    >
-                                        <option value="">—</option>
-                                        {buckets.map((bucket) => (
-                                            <option key={bucket.value} value={bucket.value}>
-                                                {bucket.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </Field>
-                            )}
-
                             <Field label={t('movements.occurred_at')} htmlFor="occurred_at" error={errors.occurred_at}>
                                 <Input
                                     id="occurred_at"
@@ -299,67 +352,27 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                             <p className="text-muted-foreground text-sm">{t('movements.pick_counterparty')}</p>
                         ) : (
                             <>
-                                {/* All four, zeroes included: a bucket reading 0.00 says
-                                    nothing is there, where a missing row leaves the reader
-                                    wondering whether it was checked. */}
-                                <dl className="space-y-2 text-sm">
-                                    {buckets.map((bucket) => {
-                                        const amount = state.positions[bucket.value];
-                                        const changes = state.after?.bucket === bucket.value;
-
-                                        return (
-                                            <div key={bucket.value} className="flex items-baseline justify-between gap-3">
-                                                <dt className={cn('text-muted-foreground', changes && 'text-foreground font-medium')}>
-                                                    {bucket.position}
-                                                </dt>
-                                                <dd>{amount !== undefined && <MoneyDisplay {...amount} signed />}</dd>
-                                            </div>
-                                        );
-                                    })}
-                                </dl>
+                                {/* One figure, and what it becomes. Both, and said in
+                                    words — a minus sign is the easiest thing on a screen
+                                    to misread. */}
+                                <Standing label={t('movements.balance_now')} amount={state.balance} />
 
                                 {state.after !== null && (
-                                    <div className="border-sidebar-border/70 dark:border-sidebar-border space-y-1 border-t pt-3">
-                                        <div className="text-muted-foreground text-xs">{t('movements.after')}</div>
-                                        <div className="flex items-baseline justify-between gap-3 text-sm">
-                                            <span>{bucketLabel(state.after.bucket)}</span>
-                                            <MoneyDisplay {...state.after.amount} signed className="font-medium" />
-                                        </div>
+                                    <div className="border-sidebar-border/70 dark:border-sidebar-border border-t pt-3">
+                                        <Standing label={t('movements.after')} amount={state.after} emphasised />
                                     </div>
                                 )}
 
-                                {/* The owner's decision: a credit may go negative, always
-                                    allowed. Said out loud, never blocked. */}
-                                {state.negative_warning !== null && (
+                                {/* The moment worth flagging: they were holding our money
+                                    and now they owe us, or the other way about. The owner's
+                                    decision stands — said out loud, never blocked. */}
+                                {state.turns_over && (
                                     <div className="space-y-1 rounded-lg border border-amber-600/40 bg-amber-600/10 p-3">
                                         <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
                                             <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-                                            {t('movements.negative')}
+                                            {t('movements.turns_over')}
                                         </div>
-                                        <p className="text-xs text-amber-800 dark:text-amber-300">{t('movements.negative_body')}</p>
-
-                                        {/* The likeliest reason a position is about to go
-                                            below zero is that the money is sitting in the
-                                            other one. Naming it turns a warning into an
-                                            answer — and the button is the answer. */}
-                                        {state.instead !== null && (
-                                            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-amber-800 dark:text-amber-300">
-                                                <span>
-                                                    {t('movements.instead', {
-                                                        bucket: state.instead.bucket_label,
-                                                        amount: `${state.instead.amount.amount} ${state.instead.amount.currency}`,
-                                                    })}
-                                                </span>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => setData('type', state.instead?.type ?? data.type)}
-                                                >
-                                                    {t('movements.use_instead', { type: state.instead.type_label })}
-                                                </Button>
-                                            </div>
-                                        )}
+                                        <p className="text-xs text-amber-800 dark:text-amber-300">{t('movements.turns_over_body')}</p>
                                     </div>
                                 )}
                             </>
@@ -384,6 +397,37 @@ function Field({ label, htmlFor, error, children }: { label: string; htmlFor: st
             </Label>
             {children}
             <InputError message={error} />
+        </div>
+    );
+}
+
+/**
+ * A balance, and which way it runs.
+ *
+ * The figure is printed without its sign and the sentence beneath carries the meaning,
+ * because "-884,620" and "they are holding 884,620 of ours" are the same fact and only
+ * one of them can be misread at a glance.
+ */
+function Standing({ label, amount, emphasised = false }: { label: string; amount: MoneyPayload; emphasised?: boolean }) {
+    const { t } = useTranslations();
+
+    const value = Number(amount.amount);
+    const magnitude = { ...amount, amount: amount.amount.replace('-', '') };
+
+    return (
+        <div className="space-y-0.5">
+            <div className="text-muted-foreground text-xs">{label}</div>
+            <MoneyDisplay {...magnitude} className={cn('text-sm', emphasised && 'font-medium')} />
+            <div
+                className={cn(
+                    'text-xs',
+                    value === 0 && 'text-muted-foreground',
+                    value > 0 && 'text-green-700 dark:text-green-400',
+                    value < 0 && 'text-red-700 dark:text-red-400',
+                )}
+            >
+                {value === 0 ? t('counterparties.settled') : value > 0 ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
+            </div>
         </div>
     );
 }

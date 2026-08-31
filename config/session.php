@@ -32,7 +32,22 @@ return [
     |
     */
 
-    'lifetime' => env('SESSION_LIFETIME', 120),
+    /*
+     * Signed in until you sign out.
+     *
+     * The owner asked for this directly. Two hours is the framework's default and it
+     * suits an application people log into; this one is the till, open all day, and
+     * being asked for a password mid-deal is worse than useless — it trains people to
+     * keep the password somewhere quick to reach.
+     *
+     * A year, plus `remember` on every login, plus a cookie that outlives the browser.
+     * Signing out is the only thing that ends it, and it ends it everywhere, because
+     * the session lives in the database rather than a signed cookie.
+     *
+     * The trade this makes: a machine somebody walks away from stays signed in.
+     * Deliberate, and worth saying out loud.
+     */
+    'lifetime' => env('SESSION_LIFETIME', 60 * 24 * 365),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountKind;
 use App\Enums\LedgerAccountSubkind;
@@ -51,27 +50,37 @@ describe('accounting nature', function (): void {
             ->and($subkind->ownerType())->toBeInstanceOf(LedgerOwnerType::class);
     })->with(LedgerAccountSubkind::cases());
 
-    it('classifies the counterparty subkinds as the specification does', function (): void {
-        expect(LedgerAccountSubkind::Custody->kind())->toBe(LedgerAccountKind::Asset)
-            ->and(LedgerAccountSubkind::Receivable->kind())->toBe(LedgerAccountKind::Asset)
-            ->and(LedgerAccountSubkind::Payable->kind())->toBe(LedgerAccountKind::Liability)
-            ->and(LedgerAccountSubkind::CreditTrust->kind())->toBe(LedgerAccountKind::Liability);
+    // An asset, and that is what makes the sign read the way the owner thinks: a debit
+    // balance means they owe us, a credit balance that we are holding theirs.
+    it('classifies the client account as an asset', function (): void {
+        expect(LedgerAccountSubkind::ClientAccount->kind())->toBe(LedgerAccountKind::Asset);
     });
 });
 
-// The ledger and the four positions of Section 5 must not drift apart.
-describe('the bridge to the four buckets', function (): void {
-    it('maps every bucket to a subkind and back', function (BalanceBucket $bucket): void {
-        $subkind = LedgerAccountSubkind::forBucket($bucket);
+describe('the counterparty account', function (): void {
+    // One account per party per currency, and it is an asset — which is what makes the
+    // sign read the way the owner thinks: a debit balance means they owe us.
+    it('is a single asset account, so the sign carries the relationship', function (): void {
+        $subkind = LedgerAccountSubkind::ClientAccount;
 
-        expect($subkind->bucket())->toBe($bucket)
-            ->and($subkind->kind()->normalBalance())
-            ->toBe($bucket->isAsset() ? EntryDirection::Debit : EntryDirection::Credit);
-    })->with(BalanceBucket::cases());
+        expect($subkind->isCounterpartyPosition())->toBeTrue()
+            ->and($subkind->ownerType())->toBe(LedgerOwnerType::Counterparty)
+            ->and($subkind->kind())->toBe(LedgerAccountKind::Asset)
+            ->and($subkind->kind()->normalBalance())->toBe(EntryDirection::Debit);
+    });
 
-    it('leaves non-counterparty subkinds with no bucket', function (): void {
-        expect(LedgerAccountSubkind::Cash->bucket())->toBeNull()
-            ->and(LedgerAccountSubkind::TradingProfit->bucket())->toBeNull();
+    it('is the only subkind a counterparty owns', function (): void {
+        $owned = array_filter(
+            LedgerAccountSubkind::cases(),
+            fn (LedgerAccountSubkind $s): bool => $s->isCounterpartyPosition(),
+        );
+
+        expect($owned)->toHaveCount(1);
+    });
+
+    it('leaves our own and the system accounts out of it', function (): void {
+        expect(LedgerAccountSubkind::Cash->isCounterpartyPosition())->toBeFalse()
+            ->and(LedgerAccountSubkind::TradingProfit->isCounterpartyPosition())->toBeFalse();
     });
 });
 
@@ -118,14 +127,17 @@ describe('resolution', function (): void {
         expect($a->id)->not->toBe($b->id);
     });
 
-    it('resolves all four positions for a counterparty', function (): void {
+    // One account per party per currency — asked for repeatedly, created once.
+    it('resolves one account per counterparty per currency', function (): void {
         $party = Counterparty::factory()->create();
 
-        $accounts = collect(BalanceBucket::cases())
-            ->map(fn (BalanceBucket $bucket) => $this->resolver->forBucket($bucket, $party, $this->egp));
+        $first = $this->resolver->forCounterparty($party, $this->egp);
+        $again = $this->resolver->forCounterparty($party, $this->egp);
+        $other = $this->resolver->forCounterparty($party, $this->usd);
 
-        expect($accounts->pluck('id')->unique())->toHaveCount(4)
-            ->and($accounts->pluck('owner_id')->unique()->all())->toBe([$party->id]);
+        expect($first->id)->toBe($again->id)
+            ->and($first->id)->not->toBe($other->id)
+            ->and($first->owner_id)->toBe($party->id);
     });
 
     it('resolves a system account once per currency', function (): void {

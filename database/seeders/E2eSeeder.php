@@ -7,6 +7,8 @@ namespace Database\Seeders;
 use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
+use App\Domain\Tenancy\BusinessProvisioner;
+use App\Domain\Tenancy\CurrentBusiness;
 use App\Enums\AccountType;
 use App\Enums\CounterpartyType;
 use App\Enums\Role;
@@ -49,33 +51,37 @@ final class E2eSeeder extends Seeder
             );
         }
 
-        $this->call([RolePermissionSeeder::class, CurrencySeeder::class]);
+        $this->call(RolePermissionSeeder::class);
 
-        $owner = User::query()->create([
-            'name' => 'E2E Owner',
-            'email' => 'owner@e2e.test',
-            'password' => Hash::make(self::PASSWORD),
-            'email_verified_at' => now(),
-        ]);
-        $owner->assignRole(Role::Administrator->value);
+        // Provision exactly as registration does. This creates the business first,
+        // then binds it while currencies and the initial safe are written. Calling
+        // CurrencySeeder globally stopped being valid once every financial record
+        // belonged to a business.
+        $owner = app(BusinessProvisioner::class)->provision(
+            businessName: 'E2E Exchange',
+            name: 'E2E Owner',
+            email: 'owner@e2e.test',
+            attributes: [
+                'password' => Hash::make(self::PASSWORD),
+                'email_verified_at' => now(),
+            ],
+        );
+
+        app(CurrentBusiness::class)->set($owner->business()->firstOrFail());
 
         $clerk = User::query()->create([
             'name' => 'E2E Clerk',
             'email' => 'clerk@e2e.test',
             'password' => Hash::make(self::PASSWORD),
             'email_verified_at' => now(),
+            'business_id' => $owner->business_id,
         ]);
-        $clerk->assignRole(Role::Operator->value);
+        $clerk->assignRole(Role::Owner->value);
 
         $egp = Currency::query()->where('code', 'EGP')->sole();
         $usd = Currency::query()->where('code', 'USD')->sole();
 
-        $safe = Account::query()->create([
-            'name' => 'Main safe',
-            'type' => AccountType::Safe,
-            'is_active' => true,
-            'sort_order' => 1,
-        ]);
+        $safe = Account::query()->where('name', 'Main safe')->sole();
 
         Account::query()->create([
             'name' => 'Bank',
@@ -104,7 +110,7 @@ final class E2eSeeder extends Seeder
         // Nine deposits totalling 3,957,540, exactly as the sheet has them.
         foreach ([500000, 500000, 400000, 457540, 400000, 500000, 400000, 400000, 400000] as $index => $amount) {
             $posting->post($rules->build(new TransactionInput(
-                type: TransactionType::CreditDeposit,
+                type: TransactionType::In,
                 currency: $egp,
                 amount: $egp->money((string) $amount),
                 occurredAt: new \DateTimeImmutable('2026-06-'.str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT)),

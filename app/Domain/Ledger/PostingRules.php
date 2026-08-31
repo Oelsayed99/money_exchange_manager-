@@ -34,23 +34,12 @@ final class PostingRules
             TransactionType::Withdrawal => $this->capitalOut($input),
             TransactionType::Transfer => $this->transfer($input),
 
-            // Money in against what they owe. A settlement is the same posting with a
-            // different intent, and the type on the transaction is what tells them
-            // apart in reporting.
-            TransactionType::MoneyReceived,
-            TransactionType::ReceivableSettlement => $this->cashIn($input, LedgerAccountSubkind::Receivable),
+            // The two client movements. Everything a party can do with us is one of
+            // them; which way the running balance ends up is the answer, not the input.
+            TransactionType::In => $this->clientMovement($input, incoming: true),
+            TransactionType::Out => $this->clientMovement($input, incoming: false),
 
-            TransactionType::MoneyPaid,
-            TransactionType::PayableSettlement,
-            TransactionType::Refund => $this->cashOut($input, LedgerAccountSubkind::Payable),
-
-            // Lending creates a receivable; borrowing creates a payable. Same buckets
-            // as trade balances, distinguished by the type — see §2 of the document.
-            TransactionType::LoanGiven => $this->cashOut($input, LedgerAccountSubkind::Receivable),
-            TransactionType::LoanReceived => $this->cashIn($input, LedgerAccountSubkind::Payable),
-
-            TransactionType::CreditDeposit => $this->cashIn($input, LedgerAccountSubkind::CreditTrust),
-            TransactionType::CreditSettlement => $this->cashOut($input, LedgerAccountSubkind::CreditTrust),
+            TransactionType::Refund => $this->clientMovement($input, incoming: false),
 
             TransactionType::Fee => $this->fee($input),
             TransactionType::Expense => $this->expense($input),
@@ -79,6 +68,12 @@ final class PostingRules
             description: $input->description,
             idempotencyKey: $input->idempotencyKey,
             status: $input->status,
+            // The rate a converted movement was agreed at. Both amounts are already in
+            // the entries; without this the statement can say what moved but not what
+            // it was turned at, which is half of the detail the operator typed.
+            attributes: $input->converts() && $input->rate !== null
+                ? ['customer_rate' => $input->rate]
+                : [],
         );
     }
 
@@ -91,25 +86,24 @@ final class PostingRules
     {
         $equity = $this->accounts->system(LedgerAccountSubkind::OpeningEquity, $input->currency);
 
-        // A counterparty's opening position, in one of the four buckets.
+        // A counterparty's opening position: one signed figure, not four. Positive
+        // means they owed us on day one, negative that we were holding theirs.
         if ($input->counterparty !== null) {
-            $bucket = $input->requireBucket();
-            $target = $this->accounts->forBucket($bucket, $input->counterparty, $input->currency);
-
-            // An asset position opens with a debit and a liability with a credit;
-            // correcting one downward is the same pair the other way round.
-            $debitTarget = $bucket->isAsset() === $input->increasesBucket;
-
-            // The statement's own rule for which way value went: growing what we owe
-            // them, or shrinking what they owe us, both mean it came from them. Without
-            // a leg the transaction list would show this row with no amount at all.
-            $fromThem = $bucket->isLiability() === $input->increasesBucket;
+            $target = $this->accounts->forCounterparty($input->counterparty, $input->currency);
+            $owesUs = ! $input->amount->isNegative();
+            $amount = $input->amount->absolute();
 
             return [
-                $debitTarget
-                    ? [EntryDraft::debit($target, $input->amount), EntryDraft::credit($equity, $input->amount)]
-                    : [EntryDraft::debit($equity, $input->amount), EntryDraft::credit($target, $input->amount)],
-                [$fromThem ? $this->receivedLeg($input) : $this->deliveredLeg($input)],
+                $owesUs
+                    ? [EntryDraft::debit($target, $amount), EntryDraft::credit($equity, $amount)]
+                    : [EntryDraft::debit($equity, $amount), EntryDraft::credit($target, $amount)],
+                [new LegDraft(
+                    $owesUs ? LegRole::Delivered : LegRole::Received,
+                    $amount,
+                    $input->currency->id,
+                    null,
+                    $input->counterparty->id,
+                )],
             ];
         }
 
@@ -163,29 +157,97 @@ final class PostingRules
     }
 
     /**
-     * Money into a custody location, against one of the counterparty's buckets.
+     * Money in from a client, or out to one — and the whole of the relationship.
+     *
+     * ## The simple case
+     *
+     * Cash moves one way, the client's running balance the other:
+     *
+     *     in    DR cash · CUR          CR client · CUR
+     *     out   DR client · CUR        CR cash · CUR
+     *
+     * ## When the two are in different currencies
+     *
+     * Take 10,000 dollars and record it against the client as pounds at 50.85. The
+     * dollars really arrived, and the client's account really moved by 508,500 — both
+     * are facts, in different currencies, so they are joined the way an exchange joins
+     * its legs, through the clearing accounts:
+     *
+     *     DR cash · USD            10,000     CR fx_position · USD    10,000
+     *     DR fx_position · EGP    508,500     CR client · EGP        508,500
+     *
+     * Each currency balances on its own, so the invariant holds and no exchange rate
+     * appears in the integrity check. The rate is stored as a description of what
+     * happened, exactly as it is on an exchange, and the position is flat at that rate
+     * by construction — the operator's rate *is* the rate of record, so there is no
+     * margin here to recognise. Margins are priced on the exchange screen.
      *
      * @return array{list<EntryDraft>, list<LegDraft>}
      */
-    private function cashIn(TransactionInput $input, LedgerAccountSubkind $subkind): array
+    private function clientMovement(TransactionInput $input, bool $incoming): array
     {
-        $bucket = $this->counterpartyAccount($input, $subkind);
+        $client = $this->accounts->forCounterparty($input->requireCounterparty(), $input->currency);
+        $cash = $this->accounts->forAccount($input->requireAccount(), $input->movedCurrency());
+        $moved = $input->movedAmount();
 
-        return [
-            [EntryDraft::debit($this->cashAccount($input), $input->amount), EntryDraft::credit($bucket, $input->amount)],
-            [$this->receivedLeg($input)],
-        ];
+        if (! $input->converts()) {
+            $entries = $incoming
+                ? [EntryDraft::debit($cash, $moved), EntryDraft::credit($client, $moved)]
+                : [EntryDraft::debit($client, $moved), EntryDraft::credit($cash, $moved)];
+
+            return [$entries, [$this->clientLegs($input, $incoming)[0]]];
+        }
+
+        $cashClearing = $this->accounts->system(LedgerAccountSubkind::FxPosition, $input->movedCurrency());
+        $bookClearing = $this->accounts->system(LedgerAccountSubkind::FxPosition, $input->currency);
+
+        $entries = $incoming
+            ? [
+                EntryDraft::debit($cash, $moved),
+                EntryDraft::credit($cashClearing, $moved),
+                EntryDraft::debit($bookClearing, $input->amount),
+                EntryDraft::credit($client, $input->amount),
+            ]
+            : [
+                EntryDraft::debit($client, $input->amount),
+                EntryDraft::credit($bookClearing, $input->amount),
+                EntryDraft::debit($cashClearing, $moved),
+                EntryDraft::credit($cash, $moved),
+            ];
+
+        return [$entries, $this->clientLegs($input, $incoming)];
     }
 
-    /** @return array{list<EntryDraft>, list<LegDraft>} */
-    private function cashOut(TransactionInput $input, LedgerAccountSubkind $subkind): array
+    /**
+     * What moved, as the transaction list shows it.
+     *
+     * The cash leg first, because that is the money somebody handed over or took away.
+     * When a conversion happened the recorded side is a second leg, so the row reads
+     * "10,000 USD in, 508,500 EGP against the account" rather than picking one.
+     *
+     * @return list<LegDraft>
+     */
+    private function clientLegs(TransactionInput $input, bool $incoming): array
     {
-        $bucket = $this->counterpartyAccount($input, $subkind);
+        $legs = [new LegDraft(
+            $incoming ? LegRole::Received : LegRole::Delivered,
+            $input->movedAmount(),
+            $input->movedCurrency()->id,
+            $input->account?->id,
+            $input->counterparty?->id,
+        )];
 
-        return [
-            [EntryDraft::debit($bucket, $input->amount), EntryDraft::credit($this->cashAccount($input), $input->amount)],
-            [$this->deliveredLeg($input)],
-        ];
+        if ($input->converts()) {
+            $legs[] = new LegDraft(
+                $incoming ? LegRole::Delivered : LegRole::Received,
+                $input->amount,
+                $input->currency->id,
+                null,
+                $input->counterparty?->id,
+            );
+        }
+
+        return $legs;
     }
 
     /** @return array{list<EntryDraft>, list<LegDraft>} */
@@ -242,17 +304,6 @@ final class PostingRules
     private function cashAccount(TransactionInput $input): LedgerAccount
     {
         return $this->accounts->forAccount($input->requireAccount(), $input->currency);
-    }
-
-    private function counterpartyAccount(TransactionInput $input, LedgerAccountSubkind $subkind): LedgerAccount
-    {
-        $bucket = $subkind->bucket();
-
-        if ($bucket === null) {
-            throw new DomainException("[{$subkind->value}] is not a counterparty position.");
-        }
-
-        return $this->accounts->forBucket($bucket, $input->requireCounterparty(), $input->currency);
     }
 
     private function receivedLeg(TransactionInput $input): LegDraft

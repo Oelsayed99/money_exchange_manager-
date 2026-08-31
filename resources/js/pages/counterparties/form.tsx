@@ -13,7 +13,6 @@ import { LoaderCircle } from 'lucide-react';
 // A type alias, not an interface: Inertia's useForm requires an implicit index
 // signature, which TypeScript gives to aliases but not to interfaces.
 type Position = {
-    bucket: string;
     currency_id: number;
     amount: string;
 };
@@ -30,17 +29,9 @@ interface CounterpartyResource {
     positions: Position[];
 }
 
-interface Bucket {
-    value: string;
-    label: string;
-    hint: string;
-    isAsset: boolean;
-}
-
 interface Props {
     counterparty: CounterpartyResource | null;
     counterpartyTypes: { value: string; label: string }[];
-    buckets: Bucket[];
     availableCurrencies: { id: number; code: string }[];
 }
 
@@ -55,7 +46,7 @@ type CounterpartyForm = {
     positions: Position[];
 };
 
-export default function CounterpartyFormPage({ counterparty, counterpartyTypes, buckets, availableCurrencies }: Props) {
+export default function CounterpartyFormPage({ counterparty, counterpartyTypes, availableCurrencies }: Props) {
     const { t } = useTranslations();
     const isEdit = counterparty !== null;
 
@@ -77,18 +68,17 @@ export default function CounterpartyFormPage({ counterparty, counterpartyTypes, 
         { title, href: '#' },
     ];
 
-    const amountFor = (bucket: string, currencyId: number) =>
-        data.positions.find((p) => p.bucket === bucket && p.currency_id === currencyId)?.amount ?? '';
+    const amountFor = (currencyId: number) => data.positions.find((p) => p.currency_id === currencyId)?.amount ?? '';
 
-    const setAmount = (bucket: string, currencyId: number, amount: string) => {
-        const others = data.positions.filter((p) => !(p.bucket === bucket && p.currency_id === currencyId));
+    const setAmount = (currencyId: number, amount: string) => {
+        const others = data.positions.filter((p) => p.currency_id !== currencyId);
 
         // An empty field means "not declared", which is different from a declared zero.
-        setData('positions', amount === '' ? others : [...others, { bucket, currency_id: currencyId, amount }]);
+        setData('positions', amount === '' ? others : [...others, { currency_id: currencyId, amount }]);
     };
 
-    const errorFor = (bucket: string, currencyId: number): string | undefined => {
-        const index = data.positions.findIndex((p) => p.bucket === bucket && p.currency_id === currencyId);
+    const errorFor = (currencyId: number): string | undefined => {
+        const index = data.positions.findIndex((p) => p.currency_id === currencyId);
 
         if (index === -1) {
             return undefined;
@@ -183,45 +173,38 @@ export default function CounterpartyFormPage({ counterparty, counterpartyTypes, 
                         </div>
                     </div>
 
-                    {/* The four buckets are laid out as a grid on purpose: seeing them
-                        side by side is what makes it obvious they are separate positions
-                        rather than one number with a sign. */}
+                    {/* One figure per currency, and it may be negative — which is the
+                        whole of what the four columns here used to say. */}
                     <fieldset className="border-sidebar-border/70 dark:border-sidebar-border grid gap-4 rounded-lg border p-4">
                         <legend className="px-1 text-sm font-medium">{t('counterparties.opening_positions')}</legend>
                         <p className="text-muted-foreground text-xs">{t('counterparties.opening_hint')}</p>
 
-                        {/* A group per currency, named by its code. "Credit held" appears
-                            once for every currency on the page, so without the grouping the
-                            four inputs in each row are indistinguishable to anything that
-                            reads labels rather than looks at the heading above them. */}
-                        {availableCurrencies.map((currency) => (
-                            <fieldset key={currency.id} className="grid gap-3">
-                                <legend className="font-mono text-sm font-medium">{currency.code}</legend>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {availableCurrencies.map((currency) => {
+                                const amount = amountFor(currency.id);
+                                const value = Number(amount);
 
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                    {buckets.map((bucket) => (
-                                        <div key={bucket.value} className="grid gap-1.5">
-                                            <Label
-                                                htmlFor={`${bucket.value}-${currency.id}`}
+                                return (
+                                    <div key={currency.id} className="grid gap-1.5">
+                                        <Label htmlFor={`position-${currency.id}`} className="font-mono text-sm">
+                                            {currency.code}
+                                        </Label>
+                                        <MoneyInput id={`position-${currency.id}`} value={amount} onChange={(next) => setAmount(currency.id, next)} />
+                                        {amount !== '' && value !== 0 && (
+                                            <p
                                                 className={
-                                                    'text-xs ' +
-                                                    (bucket.isAsset ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400')
+                                                    'text-[11px] ' +
+                                                    (value > 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')
                                                 }
                                             >
-                                                {bucket.label}
-                                            </Label>
-                                            <MoneyInput
-                                                id={`${bucket.value}-${currency.id}`}
-                                                value={amountFor(bucket.value, currency.id)}
-                                                onChange={(amount) => setAmount(bucket.value, currency.id, amount)}
-                                            />
-                                            <p className="text-muted-foreground text-[11px] leading-tight">{bucket.hint}</p>
-                                            <InputError message={errorFor(bucket.value, currency.id)} />
-                                        </div>
-                                    ))}
-                                </div>
-                            </fieldset>
-                        ))}
+                                                {value > 0 ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
+                                            </p>
+                                        )}
+                                        <InputError message={errorFor(currency.id)} />
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </fieldset>
 
                     <div className="flex items-center gap-2">

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
-    $this->user = userWithRole(Role::Administrator);
+    $this->user = userWithRole(Role::Owner);
 });
 
 describe('access', function (): void {

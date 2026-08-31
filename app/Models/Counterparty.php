@@ -7,8 +7,8 @@ namespace App\Models;
 use App\Domain\Audit\Auditable;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
+use App\Models\Concerns\BelongsToBusiness;
 use Database\Factories\CounterpartyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 final class Counterparty extends Model
 {
     use Auditable;
+    use BelongsToBusiness;
 
     /** @use HasFactory<CounterpartyFactory> */
     use HasFactory;
@@ -89,43 +90,37 @@ final class Counterparty extends Model
     }
 
     /**
-     * The declared opening position in one bucket and one currency.
+     * Where this party stood in one currency before the books began.
      *
-     * Null means no position was declared, which is not the same as a declared zero:
-     * one is silence, the other is a statement that the parties were square.
+     * Null means nothing was declared, which is not the same as a declared zero: one is
+     * silence, the other says the two of you were square.
      */
-    public function openingBalance(BalanceBucket $bucket, Currency $currency): ?Money
+    public function openingBalance(Currency $currency): ?Money
     {
         return $this->openingBalances()
-            ->where('bucket', $bucket->value)
             ->where('currency_id', $currency->getKey())
             ->first()
             ?->amount;
     }
 
     /**
-     * Declare an opening position.
+     * Declare where the relationship started, as one signed figure.
      *
-     * Negative amounts are refused. A negative receivable is a payable, and letting
-     * one be recorded as the other would quietly undo the separation this model exists
-     * to maintain — the caller must say which side they mean.
+     * Negative is not only allowed, it is half the point: **positive means they owed
+     * us**, negative that we were holding money of theirs. There used to be four
+     * separate positions here and a refusal to accept a negative in any of them,
+     * because a negative receivable was really a payable. With one signed balance the
+     * sign carries that distinction on its own.
      */
-    public function setOpeningBalance(BalanceBucket $bucket, Currency $currency, Money $amount): CounterpartyOpeningBalance
+    public function setOpeningBalance(Currency $currency, Money $amount): CounterpartyOpeningBalance
     {
         if (! $amount->currency->is($currency->spec())) {
             throw CurrencyMismatch::between($amount->currency, $currency->spec(), 'declare an opening balance in');
         }
 
-        if ($amount->isNegative()) {
-            throw new \InvalidArgumentException(
-                "An opening {$bucket->value} balance cannot be negative. "
-                ."A negative {$bucket->value} is a {$bucket->mirror()->value}; record it there instead."
-            );
-        }
-
         /** @var CounterpartyOpeningBalance $balance */
         $balance = $this->openingBalances()->updateOrCreate(
-            ['bucket' => $bucket->value, 'currency_id' => $currency->getKey()],
+            ['currency_id' => $currency->getKey()],
             ['amount' => $amount->toStorageString()],
         );
 
@@ -133,31 +128,19 @@ final class Counterparty extends Model
     }
 
     /**
-     * Every declared opening position, grouped by bucket.
+     * Every declared opening position, by currency.
      *
-     * Returned grouped rather than summed: a statement shows what is owed and what is
-     * held side by side, and the reader draws their own conclusion.
-     *
-     * @return array<string, array<string, string>> bucket => (currency code => amount)
+     * @return array<string, string> currency code => signed amount
      */
     public function openingPositions(): array
     {
-        $rows = $this->openingBalances()->with('currency')->get();
-
         $positions = [];
 
-        // Iterating the enum rather than the query result gives a stable order that
-        // means something — assets before liabilities — instead of whatever order the
-        // rows happen to come back in.
-        foreach (BalanceBucket::cases() as $bucket) {
-            foreach ($rows->where('bucket', $bucket) as $balance) {
-                $currency = $balance->currency;
+        foreach ($this->openingBalances()->with('currency')->get() as $balance) {
+            $currency = $balance->currency;
 
-                if ($currency === null || $balance->amount === null) {
-                    continue;
-                }
-
-                $positions[$bucket->value][$currency->code] = $balance->amount->toDisplayString();
+            if ($currency instanceof Currency && $balance->amount !== null) {
+                $positions[$currency->code] = $balance->amount->toDisplayString();
             }
         }
 

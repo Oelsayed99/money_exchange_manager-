@@ -8,6 +8,7 @@ use App\Casts\MoneyCast;
 use App\Domain\Audit\Auditable;
 use App\Domain\Money\Money;
 use App\Enums\ReconciliationStatus;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -39,6 +40,7 @@ use RuntimeException;
 final class Reconciliation extends Model
 {
     use Auditable;
+    use BelongsToBusiness;
 
     /** The columns a reconciliation exists to record. None may be edited. */
     private const array FROZEN = [

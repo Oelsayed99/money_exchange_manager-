@@ -10,19 +10,16 @@ import { Head, Link } from '@inertiajs/react';
 import { AlertTriangle, FileText, Pencil, Plus } from 'lucide-react';
 
 interface Position {
-    bucket: string;
     currency_id: number;
     code: string | null;
     amount: string;
     unposted: string;
 }
 
-/** One currency, two sides. The four buckets travel with it for the drill-down. */
+/** One currency, one signed balance. Positive means they owe us. */
 interface Standing {
     code: string;
-    ours: string;
-    theirs: string;
-    buckets: Record<string, string>;
+    balance: string;
 }
 
 interface CounterpartyRow {
@@ -37,14 +34,7 @@ interface CounterpartyRow {
     standings: Standing[];
 }
 
-interface Bucket {
-    value: string;
-    label: string;
-    hint: string;
-    isAsset: boolean;
-}
-
-export default function CounterpartiesIndex({ counterparties, buckets }: { counterparties: CounterpartyRow[]; buckets: Bucket[] }) {
+export default function CounterpartiesIndex({ counterparties }: { counterparties: CounterpartyRow[] }) {
     const { t } = useTranslations();
     const { can } = usePermissions();
     const canManage = can('counterparties.manage');
@@ -77,9 +67,9 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                 <div className="border-sidebar-border/70 dark:border-sidebar-border overflow-x-auto rounded-xl border">
                     <table className="w-full min-w-[56rem] border-collapse text-sm">
                         <thead className="bg-muted/50 sticky top-0">
-                            {/* Two columns, not four. Which side the money is on is the
-                                question a list answers; which bucket it sits in is the
-                                question the statement answers. */}
+                            {/* One column. Which way the money runs is the question a
+                                list answers; the movements behind it are the question
+                                the statement answers. */}
                             <tr className="text-muted-foreground">
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('counterparties.fields.name')}
@@ -89,17 +79,10 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                 </th>
                                 <th
                                     scope="col"
-                                    title={t('counterparties.ours_hint')}
+                                    title={t('counterparties.balance_hint')}
                                     className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end font-medium"
                                 >
-                                    {t('counterparties.ours_with_them')}
-                                </th>
-                                <th
-                                    scope="col"
-                                    title={t('counterparties.theirs_hint')}
-                                    className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end font-medium"
-                                >
-                                    {t('counterparties.theirs_with_us')}
+                                    {t('counterparties.balance')}
                                 </th>
                                 <th scope="col" className="px-4 py-3 text-start font-medium">
                                     {t('common.status')}
@@ -113,7 +96,7 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                         <tbody>
                             {counterparties.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="text-muted-foreground px-4 py-12 text-center">
+                                    <td colSpan={5} className="text-muted-foreground px-4 py-12 text-center">
                                         {t('counterparties.empty')}
                                     </td>
                                 </tr>
@@ -144,8 +127,7 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                                     </td>
                                     <td className="text-muted-foreground px-4 py-3">{row.type_label}</td>
 
-                                    <Side row={row} field="ours" />
-                                    <Side row={row} field="theirs" />
+                                    <Balance row={row} />
 
                                     <td className="px-4 py-3">
                                         <StatusBadge active={row.is_active} />
@@ -172,44 +154,56 @@ export default function CounterpartiesIndex({ counterparties, buckets }: { count
                     </table>
                 </div>
 
-                <p className="text-muted-foreground max-w-3xl text-xs">
-                    {t('counterparties.list_hint', { buckets: buckets.map((bucket) => bucket.label).join(' · ') })}
-                </p>
+                <p className="text-muted-foreground max-w-3xl text-xs">{t('counterparties.list_hint')}</p>
             </div>
         </AppLayout>
     );
 }
 
 /**
- * One side of one relationship, per currency, each figure a way in.
+ * Where one relationship stands, per currency — one signed figure.
  *
- * The number is a link because it is a summary of something: following it opens the
- * statement for that currency, which is where the four buckets and the movements behind
- * them are.
+ * There were two columns here, "our money with them" and "their money with us", and the
+ * owner's objection was exact: those cannot both be true, they are one thing and its
+ * difference. Positive means they owe us; negative means we owe them. The colour and
+ * the words beneath say which, so nobody reads a minus sign wrong on a screen.
+ *
+ * The number is a link: following it opens the statement for that currency, where the
+ * movements behind the figure are.
  */
-function Side({ row, field }: { row: CounterpartyRow; field: 'ours' | 'theirs' }) {
+function Balance({ row }: { row: CounterpartyRow }) {
     const { t } = useTranslations();
 
-    const carrying = row.standings.filter((standing) => standing[field] !== '0' && Number(standing[field]) !== 0);
+    const carrying = row.standings.filter((standing) => Number(standing.balance) !== 0);
+
+    if (carrying.length === 0) {
+        return (
+            <td className="border-sidebar-border/70 dark:border-sidebar-border text-muted-foreground border-s px-4 py-3 text-end">
+                {t('counterparties.settled')}
+            </td>
+        );
+    }
 
     return (
         <td className="border-sidebar-border/70 dark:border-sidebar-border border-s px-4 py-3 text-end">
-            {carrying.length === 0 ? (
-                <span className="text-muted-foreground">{t('counterparties.nothing_declared')}</span>
-            ) : (
-                <div className="flex flex-col items-end gap-0.5">
-                    {carrying.map((standing) => (
+            <div className="flex flex-col items-end gap-1">
+                {carrying.map((standing) => {
+                    const theyOweUs = Number(standing.balance) > 0;
+
+                    return (
                         <Link
                             key={standing.code}
                             href={`/counterparties/${row.id}/statement?currency=${standing.code}`}
-                            title={t('counterparties.open_statement', { currency: standing.code })}
-                            className="hover:text-foreground focus-visible:ring-ring rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                            className="focus-visible:ring-ring flex flex-col items-end rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
                         >
-                            <MoneyDisplay amount={standing[field]} currency={standing.code} />
+                            <MoneyDisplay amount={standing.balance} currency={standing.code} signed />
+                            <span className={'text-[11px] ' + (theyOweUs ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>
+                                {theyOweUs ? t('counterparties.they_owe_us') : t('counterparties.we_owe_them')}
+                            </span>
                         </Link>
-                    ))}
-                </div>
-            )}
+                    );
+                })}
+            </div>
         </td>
     );
 }

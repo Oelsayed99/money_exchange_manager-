@@ -14,32 +14,24 @@ return [
     'mode_hint_internal' => 'Includes the margin on each deal. Not for sending out.',
     'mode_hint_client' => 'The money that moved, and nothing else.',
 
-    /*
-     * What a balance in each bucket means to whoever is reading the page.
-     *
-     * The sheet this replaces used one signed column, so "(899,510)" and "50,490" were
-     * distinguished by a parenthesis. These labels exist so nobody has to interpret a
-     * sign to know whether they are owed money or holding it.
-     */
-    'positions' => [
-        'custody' => 'Our money held by them',
-        'receivable' => 'Owed to us',
-        'payable' => 'Owed to them',
-        'credit_trust' => 'Client credit with us',
-    ],
-
     'columns' => [
         'date' => 'Date',
         'details' => 'Details',
         'in' => 'In',
         'out' => 'Out',
-        'position' => 'Position after',
-        'bucket' => 'Position type',
+        'position' => 'Balance after',
+        'moved' => 'Actually moved',
+        'rate' => 'Rate',
         'profit' => 'Profit',
     ],
 
-    'in_hint' => 'Value from them to us.',
-    'out_hint' => 'Value from us to them.',
+    'totals' => 'Totals',
+    'in_hint' => 'Money we took from them.',
+    'out_hint' => 'Money we paid to them.',
+    'they_owe_us' => 'They owe us :amount.',
+    'we_hold_theirs' => 'We are holding :amount of theirs.',
+    'settled_now' => 'Nothing either way.',
+    'moved_as' => ':amount at :rate',
 
     'opening' => 'Opening',
     'closing' => 'Closing',

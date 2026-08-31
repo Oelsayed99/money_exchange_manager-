@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    // The one account a new business starts with, so the first movement has
+    // somewhere to go. Renameable like any other.
+    'first_safe' => 'Main safe',
+
     'title' => 'Accounts',
     'description' => 'Where money is held: banks, safes, wallets, custody and credit accounts.',
     'create_title' => 'Add account',

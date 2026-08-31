@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Casts\MoneyCast;
 use App\Domain\Money\Money;
 use App\Enums\LegRole;
+use App\Models\Concerns\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -29,6 +30,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 final class TransactionLeg extends Model
 {
+    use BelongsToBusiness;
+
     protected $fillable = [
         'transaction_id',
         'role',

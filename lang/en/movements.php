@@ -3,8 +3,16 @@
 declare(strict_types=1);
 
 return [
+    'balance_now' => 'Balance now',
+    'turns_over' => 'This turns the relationship over',
+    'turns_over_body' => 'They were holding money of ours and will now owe us, or the other way about. Allowed, and recorded as it stands.',
+    'convert_hint' => 'Leave this alone unless the money that changed hands was in a different currency from the one above. Enter what actually moved and the rate you agreed; both are kept.',
+    'cash_amount' => 'Actually moved',
+    'cash_currency' => 'In currency',
+    'same_currency' => 'Same currency',
+    'rate' => 'Rate',
     'title' => 'Record a movement',
-    'description' => 'Credit in and out, lending and borrowing, settlements, transfers, fees and expenses.',
+    'description' => 'Money in and money out, transfers between accounts, fees and expenses.',
 
     'type' => 'What happened',
     'occurred_at' => 'Date',
@@ -14,7 +22,6 @@ return [
     'account' => 'From / into',
     'destination_account' => 'To',
     'counterparty' => 'Counterparty',
-    'bucket' => 'Which position',
     'method' => 'How the money moved',
     'reference' => 'Reference',
     'note' => 'Notes',
@@ -29,8 +36,4 @@ return [
     'decreases' => 'decreases',
     'pick_counterparty' => 'Choose a counterparty to see where they stand.',
 
-    'negative' => 'This takes the balance below zero',
-    'negative_body' => 'Taking a position below zero means the relationship has turned over — they now owe you what you were holding, or the other way about. It is allowed and will be recorded as it stands.',
-    'instead' => 'This client has :amount in :bucket, which this movement does not touch.',
-    'use_instead' => 'Use :type',
 ];

@@ -123,6 +123,31 @@ final class Decimal
     }
 
     /**
+     * The same number, without the zeros a fixed-scale column pads it with.
+     *
+     * A rate is stored in a `decimal(_, 12)` and comes back as '50.850000000000'. That
+     * is the same number the operator typed, but nobody typed it and nobody wants to
+     * read it on a statement. Dropping trailing zeros after the point changes nothing
+     * about the value.
+     *
+     * Presentation only. Nothing arithmetic depends on how wide a decimal is written,
+     * and storage keeps whatever scale its column declares.
+     */
+    public static function trimTrailingZeros(string $value): string
+    {
+        // Validated rather than assumed: this is fed straight from a database column.
+        self::assertValid($value);
+
+        if (! str_contains($value, '.')) {
+            return $value;
+        }
+
+        // A valid decimal always carries a digit before the point, so trimming the
+        // fraction away can never leave nothing behind.
+        return rtrim(rtrim($value, '0'), '.');
+    }
+
+    /**
      * bcmath can produce a signed zero such as '-0.00'. A negative zero must never
      * reach storage, a report, or a customer-facing statement.
      *

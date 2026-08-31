@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\Export\CsvWriter;
 use App\Domain\Export\TransactionsExport;
+use App\Domain\Tenancy\Owned;
 use App\Enums\LegRole;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
@@ -46,8 +47,8 @@ final class TransactionController extends Controller
         $validated = $request->validate([
             'type' => ['nullable', Rule::enum(TransactionType::class)],
             'status' => ['nullable', Rule::enum(TransactionStatus::class)],
-            'counterparty' => ['nullable', 'integer', Rule::exists('counterparties', 'id')],
-            'currency' => ['nullable', 'string', Rule::exists('currencies', 'code')],
+            'counterparty' => ['nullable', 'integer', Owned::exists('counterparties', 'id')],
+            'currency' => ['nullable', 'string', Owned::exists('currencies', 'code')],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'search' => ['nullable', 'string', 'max:255'],
@@ -86,8 +87,8 @@ final class TransactionController extends Controller
         $validated = $request->validate([
             'type' => ['nullable', Rule::enum(TransactionType::class)],
             'status' => ['nullable', Rule::enum(TransactionStatus::class)],
-            'counterparty' => ['nullable', 'integer', Rule::exists('counterparties', 'id')],
-            'currency' => ['nullable', 'string', Rule::exists('currencies', 'code')],
+            'counterparty' => ['nullable', 'integer', Owned::exists('counterparties', 'id')],
+            'currency' => ['nullable', 'string', Owned::exists('currencies', 'code')],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'search' => ['nullable', 'string', 'max:255'],

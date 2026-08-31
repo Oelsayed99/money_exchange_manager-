@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RunsPerBusiness;
 use App\Domain\Ledger\BalanceProjector;
 use App\Domain\Money\Money;
 use App\Models\LedgerAccount;
@@ -20,19 +21,28 @@ use Illuminate\Support\Facades\DB;
  */
 final class LedgerVerify extends Command
 {
-    protected $signature = 'ledger:verify {--transactions : Also re-check that every transaction balances per currency}';
+    use RunsPerBusiness;
+
+    protected $signature = 'ledger:verify
+        {--transactions : Also re-check that every transaction balances per currency}
+        {--business= : Check one business only, by id or by name}';
 
     protected $description = 'Check cached balances against the ledger, and report any that disagree';
 
     public function handle(BalanceProjector $projector): int
     {
-        $problems = 0;
+        // One business at a time, with its books open. The command then reads exactly
+        // what the application reads, which is the only thing that makes "verified"
+        // mean anything.
+        $problems = $this->forEachBusiness(function () use ($projector): int {
+            $found = $this->verifyBalances($projector);
 
-        $problems += $this->verifyBalances($projector);
+            if ($this->option('transactions')) {
+                $found += $this->verifyTransactions();
+            }
 
-        if ($this->option('transactions')) {
-            $problems += $this->verifyTransactions();
-        }
+            return $found;
+        });
 
         if ($problems === 0) {
             $this->info('Ledger verified: every cached balance agrees with the entries.');

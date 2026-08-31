@@ -8,7 +8,6 @@ use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\TransactionType;
 use App\Models\Counterparty;
 use App\Models\CounterpartyOpeningBalance;
@@ -19,17 +18,15 @@ use DateTimeInterface;
 /**
  * Puts a declared opening position into the ledger.
  *
- * A position typed on a counterparty used to be a note on their record — no entry, no
- * date, nothing in the transaction list — and the statement had to carry a warning
- * saying so. Every figure in this application is meant to have a transaction behind it,
- * and these were the exception.
+ * One signed figure per party per currency: positive means they owed us on day one,
+ * negative that we were already holding money of theirs.
  *
  * ## What happens when a figure changes
  *
  * The ledger cannot un-post. So a change is not an edit; it is a second transaction for
  * the difference, dated when the change was made:
  *
- *   declared 900,000, nothing posted   →  post 900,000 opening the position
+ *   declared 900,000, nothing posted   →  post 900,000
  *   raised to 950,000                  →  post 50,000 more
  *   lowered to 800,000                 →  post 150,000 the other way
  *   removed                            →  post 800,000 the other way, then forget it
@@ -37,9 +34,8 @@ use DateTimeInterface;
  * Both transactions stay. Somebody reading the trail sees the figure was raised, when,
  * and by whom — which is the whole reason for asking.
  *
- * `posted_amount` on the record is what makes this possible: without it, raising a
- * figure from 900,000 to 950,000 is indistinguishable from posting 950,000 for the
- * first time.
+ * `posted_amount` is what makes this possible: without it, raising a figure from
+ * 900,000 to 950,000 is indistinguishable from posting 950,000 for the first time.
  */
 final readonly class OpeningPositionRecorder
 {
@@ -51,7 +47,7 @@ final readonly class OpeningPositionRecorder
     /**
      * Bring a party's declared positions into line with the form, posting the changes.
      *
-     * @param  list<array{bucket: string, currency_id: int|string, amount: string}>  $rows
+     * @param  list<array{currency_id: int|string, amount: string}>  $rows
      * @return list<Transaction> what was posted, in the order it was posted
      */
     public function sync(Counterparty $party, array $rows, DateTimeInterface $at): array
@@ -60,16 +56,10 @@ final readonly class OpeningPositionRecorder
         $keep = [];
 
         foreach ($rows as $row) {
-            $bucket = BalanceBucket::from($row['bucket']);
             $currency = Currency::query()->findOrFail((int) $row['currency_id']);
 
-            $position = $party->openingBalances()->firstOrNew([
-                'bucket' => $bucket,
-                'currency_id' => $currency->getKey(),
-            ]);
-
-            $declared = $currency->money($row['amount']);
-            $transaction = $this->settle($party, $position, $bucket, $currency, $declared, $at);
+            $position = $party->openingBalances()->firstOrNew(['currency_id' => $currency->getKey()]);
+            $transaction = $this->settle($party, $position, $currency, $currency->money($row['amount']), $at);
 
             if ($transaction instanceof Transaction) {
                 $posted[] = $transaction;
@@ -88,14 +78,7 @@ final readonly class OpeningPositionRecorder
             $currency = $position->currency;
 
             if ($currency instanceof Currency) {
-                $transaction = $this->settle(
-                    $party,
-                    $position,
-                    $position->bucket,
-                    $currency,
-                    Money::zero($currency->spec()),
-                    $at,
-                );
+                $transaction = $this->settle($party, $position, $currency, Money::zero($currency->spec()), $at);
 
                 if ($transaction instanceof Transaction) {
                     $posted[] = $transaction;
@@ -117,7 +100,6 @@ final readonly class OpeningPositionRecorder
     private function settle(
         Counterparty $party,
         CounterpartyOpeningBalance $position,
-        BalanceBucket $bucket,
         Currency $currency,
         Money $declared,
         DateTimeInterface $at,
@@ -127,7 +109,6 @@ final readonly class OpeningPositionRecorder
 
         $position->fill([
             'currency_id' => $currency->getKey(),
-            'bucket' => $bucket,
             'amount' => $declared,
             'posted_amount' => $declared,
         ])->save();
@@ -136,19 +117,15 @@ final readonly class OpeningPositionRecorder
             return null;
         }
 
+        // The amount carries its own sign here, which the opening-balance rule reads:
+        // positive opens a debt to us, negative opens one the other way.
         return $this->posting->post($this->rules->build(new TransactionInput(
             type: TransactionType::OpeningBalance,
             currency: $currency,
-            // Amounts are always positive; the direction says which way it went.
-            amount: $difference->absolute(),
+            amount: $difference,
             occurredAt: $at,
             counterparty: $party,
-            bucket: $bucket,
-            increasesBucket: ! $difference->isNegative(),
-            description: __('counterparties.opening_transaction', [
-                'bucket' => $bucket->label(),
-                'party' => $party->name,
-            ]),
+            description: __('counterparties.opening_transaction', ['party' => $party->name]),
         )));
     }
 }

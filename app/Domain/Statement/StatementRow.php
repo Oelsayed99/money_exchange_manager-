@@ -5,20 +5,14 @@ declare(strict_types=1);
 namespace App\Domain\Statement;
 
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\TransactionType;
 use Illuminate\Support\Carbon;
 
 /**
- * One line of a counterparty statement.
+ * One line of a counterparty statement: a date, what it was, in, out, and the balance.
  *
- * Modelled on the sheet this replaces: a date, what it was, money in, money out, and
- * where that leaves things. One difference, and it is the important one — the position
- * is not a signed number. See {@see CounterpartyStatement}.
- *
- * Exactly one of {@see $in} and {@see $out} is set. An entry either brought value from
- * the party or sent value to them; there is no line that does both, and a row that
- * could would be two rows.
+ * Exactly one of {@see $in} and {@see $out} is set. Money either came from them or went
+ * to them; a line that did both would be two lines.
  */
 final readonly class StatementRow
 {
@@ -28,14 +22,24 @@ final readonly class StatementRow
         public Carbon $occurredAt,
         public ?string $reference,
         public ?string $description,
-        /** Which of the four positions this line moved. */
-        public BalanceBucket $bucket,
-        /** Value from them to us. */
+        /** Money we took from them. */
         public ?Money $in,
-        /** Value from us to them. */
+        /** Money we paid to them. */
         public ?Money $out,
-        /** This bucket's balance once this line is applied. */
+        /**
+         * The running balance once this line is applied.
+         *
+         * Positive means they owe us; negative means we are holding theirs.
+         */
         public Money $balanceAfter,
+        /**
+         * What actually moved, when it was not the currency this statement is in.
+         *
+         * "10,000 USD at 50.85" against a line recorded as 508,500 EGP. Null when the
+         * money moved in the same currency it was recorded in, which is most of the time.
+         */
+        public ?Money $movedAmount,
+        public ?string $rate,
         /**
          * The margin on the transaction behind this line.
          *

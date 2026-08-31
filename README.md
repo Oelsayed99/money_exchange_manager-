@@ -30,6 +30,7 @@ The design decisions here follow from that, and each one is recorded as an ADR i
 | [0029](docs/adr/0029-two-sides-on-the-counterparty-list.md) | Two sides on the counterparty list, with the buckets a click away |
 | [0030](docs/adr/0030-opening-positions-are-transactions.md) | A position typed on a counterparty is posted, dated and findable |
 | [0031](docs/adr/0031-reference-rates.md) | Market rates on the dashboard, sealed away from the ledger |
+| [0032](docs/adr/0032-one-running-balance.md) | One running balance per counterparty; In and Out; record in another currency |
 
 ### Money is a decimal string, not integer minor units
 

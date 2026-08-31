@@ -7,7 +7,7 @@ namespace App\Http\Requests;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
+use App\Domain\Tenancy\Owned;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
 use App\Models\Account;
@@ -35,6 +35,9 @@ final class MovementRequest extends FormRequest
         return Gate::allows('create', Transaction::class);
     }
 
+    /** Rates carry more places than money does — the same twelve the exchange screen allows. */
+    private const int RATE_SCALE = 12;
+
     /** @return array<string, list<mixed>|string> */
     public function rules(): array
     {
@@ -48,27 +51,32 @@ final class MovementRequest extends FormRequest
                 ),
             ],
             'occurred_at' => ['required', 'date'],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'amount' => ['required', 'string'],
-            'account_id' => ['required', 'integer', Rule::exists('accounts', 'id')->whereNull('deleted_at')],
+            'account_id' => ['required', 'integer', Owned::exists('accounts', 'id')->whereNull('deleted_at')],
 
             'destination_account_id' => [
                 $type?->needsDestinationAccount() === true ? 'required' : 'nullable',
                 'integer',
                 'different:account_id',
-                Rule::exists('accounts', 'id')->whereNull('deleted_at'),
+                Owned::exists('accounts', 'id')->whereNull('deleted_at'),
             ],
 
             'counterparty_id' => [
                 $type?->needsCounterparty() === true ? 'required' : 'nullable',
                 'integer',
-                Rule::exists('counterparties', 'id')->whereNull('deleted_at'),
+                Owned::exists('counterparties', 'id')->whereNull('deleted_at'),
             ],
 
-            'bucket' => [
-                $type?->needsBucket() === true && $this->input('counterparty_id') !== null ? 'required' : 'nullable',
-                Rule::enum(BalanceBucket::class),
+            // The money that actually changed hands, when it was not the currency the
+            // movement is being recorded in. Both or neither.
+            'cash_currency_id' => [
+                $type?->mayConvert() === true ? 'nullable' : 'prohibited',
+                'integer',
+                Owned::exists('currencies', 'id'),
             ],
+            'cash_amount' => ['nullable', 'required_with:cash_currency_id', 'string'],
+            'rate' => ['nullable', 'required_with:cash_currency_id', 'string'],
 
             'method' => ['nullable', Rule::enum(MovementMethod::class)],
             'reference' => ['nullable', 'string', 'max:255'],
@@ -79,7 +87,7 @@ final class MovementRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['destination_account_id', 'counterparty_id', 'bucket', 'method'] as $field) {
+        foreach (['destination_account_id', 'counterparty_id', 'method'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
             }
@@ -109,6 +117,34 @@ final class MovementRequest extends FormRequest
             if (bccomp($amount, '0', Decimal::WORKING_SCALE) <= 0) {
                 $validator->errors()->add('amount', __('movements.amount_positive'));
             }
+
+            // The cash side, when there is one. `string` alone would let "abc" through
+            // to be stored as the rate of record and printed on a client's statement.
+            if ($this->input('cash_currency_id') === null || $this->input('cash_currency_id') === '') {
+                return;
+            }
+
+            foreach (['cash_amount' => Money::SCALE, 'rate' => self::RATE_SCALE] as $field => $scale) {
+                $value = $this->input($field);
+                $label = __('movements.'.($field === 'rate' ? 'rate' : 'cash_amount'));
+
+                if (! is_string($value) || ! Decimal::isValid($value)) {
+                    $validator->errors()->add($field, __('validation.numeric', ['attribute' => $label]));
+
+                    continue;
+                }
+
+                if (Decimal::scaleOf($value) > $scale) {
+                    $validator->errors()->add($field, __('validation.max.numeric', [
+                        'attribute' => $label,
+                        'max' => $scale,
+                    ]));
+                }
+
+                if (bccomp($value, '0', Decimal::WORKING_SCALE) <= 0) {
+                    $validator->errors()->add($field, __('movements.amount_positive'));
+                }
+            }
         });
     }
 
@@ -125,6 +161,10 @@ final class MovementRequest extends FormRequest
         $currency = Currency::query()->findOrFail((int) $this->validated('currency_id'));
         $type = TransactionType::from((string) $this->validated('type'));
 
+        $cashCurrency = $this->validated('cash_currency_id') !== null
+            ? Currency::query()->find((int) $this->validated('cash_currency_id'))
+            : null;
+
         return new TransactionInput(
             type: $type,
             currency: $currency,
@@ -137,9 +177,11 @@ final class MovementRequest extends FormRequest
             counterparty: $this->validated('counterparty_id') !== null
                 ? Counterparty::query()->find((int) $this->validated('counterparty_id'))
                 : null,
-            bucket: $this->validated('bucket') !== null
-                ? BalanceBucket::from((string) $this->validated('bucket'))
+            cashCurrency: $cashCurrency,
+            cashAmount: $cashCurrency instanceof Currency && $this->validated('cash_amount') !== null
+                ? $cashCurrency->money((string) $this->validated('cash_amount'))
                 : null,
+            rate: $this->validated('rate'),
             method: $this->validated('method') !== null
                 ? MovementMethod::from((string) $this->validated('method'))
                 : null,

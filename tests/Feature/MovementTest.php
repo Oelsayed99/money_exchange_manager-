@@ -3,13 +3,9 @@
 declare(strict_types=1);
 
 use App\Domain\Ledger\LedgerAccountResolver;
-use App\Domain\Ledger\PostingRules;
-use App\Domain\Ledger\PostingService;
-use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
+use App\Domain\Money\Decimal;
 use App\Enums\Role;
-use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Counterparty;
 use App\Models\Currency;
@@ -18,6 +14,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use Database\Seeders\CurrencySeeder;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Testing\TestResponse;
 
 beforeEach(function (): void {
     $this->seed(RolePermissionSeeder::class);
@@ -31,10 +28,10 @@ beforeEach(function (): void {
     $this->party = Counterparty::factory()->create(['name' => 'سالم التجريبي']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
+    // No role at all: the gate must fail closed.
     $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
 });
 
 function movementPayload(array $overrides = []): array
@@ -42,7 +39,7 @@ function movementPayload(array $overrides = []): array
     $test = test();
 
     return [
-        'type' => 'credit_deposit',
+        'type' => 'in',
         'occurred_at' => '2026-06-10',
         'currency_id' => $test->egp->id,
         'amount' => '500000',
@@ -86,7 +83,7 @@ describe('the form', function (): void {
         // An exchange needs two amounts and a rate; a reversal is never created directly.
         expect($offered)->not->toContain('currency_exchange')
             ->and($offered)->not->toContain('reversal')
-            ->and($offered)->toContain('credit_deposit', 'loan_given', 'loan_received', 'transfer');
+            ->and($offered)->toContain('in', 'out', 'in', 'transfer');
     });
 
     // The form shows and requires the right fields from what the type declares, rather
@@ -95,62 +92,134 @@ describe('the form', function (): void {
         $props = $this->actingAs($this->operator)->get('/movements')->viewData('page')['props'];
         $types = collect($props['types'])->keyBy('value');
 
-        expect($types['credit_deposit']['needsCounterparty'])->toBeTrue()
-            ->and($types['credit_deposit']['bucket'])->toBe('credit_trust')
-            ->and($types['credit_deposit']['increases'])->toBeTrue()
+        expect($types['in']['needsCounterparty'])->toBeTrue()
+            ->and($types['in']['mayConvert'])->toBeTrue()
+            // In lowers the balance, out raises it: paying somebody puts them in debt
+            // to us, taking money from them does the reverse.
+            ->and($types['in']['increases'])->toBeFalse()
+            ->and($types['out']['increases'])->toBeTrue()
             ->and($types['transfer']['needsDestinationAccount'])->toBeTrue()
             ->and($types['transfer']['needsCounterparty'])->toBeFalse()
-            ->and($types['opening_balance']['needsBucket'])->toBeTrue();
+            ->and($types['transfer']['mayConvert'])->toBeFalse();
     });
 });
 
 describe('recording', function (): void {
-    it('records credit left with us', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload())
-            ->assertRedirect('/movements')
-            ->assertSessionHas('success');
+    function clientBalance(): string
+    {
+        $test = test();
+        $account = app(LedgerAccountResolver::class)->forCounterparty($test->party, $test->egp);
 
-        expect(bucketOf(BalanceBucket::CreditTrust))->toBe('500000.00');
+        return LedgerBalance::query()->where('ledger_account_id', $account->id)->sole()->confirmed()->toDisplayString();
+    }
+
+    it('lowers the balance when money comes in from them', function (): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '500000']))->assertRedirect();
+
+        expect(clientBalance())->toBe('-500000.00');
     });
 
-    it('records money lent as something they owe', function (): void {
+    it('raises it when money goes out to them', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/movements', movementPayload(['type' => 'out', 'amount' => '250000']))
+            ->assertRedirect();
+
+        expect(clientBalance())->toBe('250000.00');
+    });
+
+    it('nets the two into one figure', function (): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '899510']));
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'out', 'amount' => '14890']));
+
+        expect(clientBalance())->toBe('-884620.00');
+    });
+
+    /*
+     * The change the owner asked for: take money in one currency, record it in another.
+     *
+     * The dollars really arrive and the client's account really moves in pounds. Both
+     * facts are kept, each currency balances on its own, and the rate is stored as the
+     * description of what was agreed.
+     */
+    it('records a movement in a currency other than the one that moved', function (): void {
+        $usd = Currency::query()->where('code', 'USD')->sole();
+
         $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_given', 'amount' => '400000',
-        ]));
+            'amount' => '508500',
+            'cash_currency_id' => $usd->id,
+            'cash_amount' => '10000',
+            'rate' => '50.85',
+        ]))->assertRedirect()->assertSessionHasNoErrors();
 
-        expect(bucketOf(BalanceBucket::Receivable))->toBe('400000.00');
-    });
+        $cash = app(LedgerAccountResolver::class)->forAccount($this->safe, $usd);
 
-    it('records money borrowed as something we owe', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_received', 'amount' => '300000',
-        ]));
-
-        expect(bucketOf(BalanceBucket::Payable))->toBe('300000.00');
-    });
-
-    it('reduces what they owe when they settle', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'loan_given', 'amount' => '400000']));
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => 'receivable_settlement', 'amount' => '150000']));
-
-        expect(bucketOf(BalanceBucket::Receivable))->toBe('250000.00');
-    });
-
-    it('moves money between our own locations', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'transfer',
-            'counterparty_id' => null,
-            'destination_account_id' => $this->bank->id,
-            'amount' => '1000',
-        ]))->assertSessionHasNoErrors();
-
-        expect(Transaction::query()->sole()->type)->toBe(TransactionType::Transfer);
-    });
-
-    it('leaves the ledger verifiable', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload());
+        expect(clientBalance())->toBe('-508500.00')
+            ->and(LedgerBalance::query()->where('ledger_account_id', $cash->id)->sole()->confirmed()->toDisplayString())
+            ->toBe('10000.00');
 
         $this->artisan('ledger:verify --transactions')->assertExitCode(0);
+    });
+
+    it('keeps both amounts and the rate on the record', function (): void {
+        $usd = Currency::query()->where('code', 'USD')->sole();
+
+        $this->actingAs($this->operator)->post('/movements', movementPayload([
+            'amount' => '508500',
+            'cash_currency_id' => $usd->id,
+            'cash_amount' => '10000',
+            'rate' => '50.85',
+        ]));
+
+        $transaction = Transaction::query()->sole();
+
+        expect($transaction->legs)->toHaveCount(2)
+            ->and($transaction->legs->pluck('currency_id')->all())->toBe([$usd->id, $this->egp->id])
+            // The rate itself. This assertion was missing while the name of the test
+            // promised it, and the rate was being dropped entirely — until a browser
+            // test read "10,000.00 USD at —" off a statement.
+            //
+            // Trimmed, because the column pads to twelve places: what is asserted is
+            // that the number the operator typed comes back, not how wide the column is.
+            ->and(Decimal::trimTrailingZeros((string) $transaction->customer_rate))->toBe('50.85');
+    });
+
+    it('leaves the rate off a movement that did not convert', function (): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '1000']));
+
+        expect(Transaction::query()->sole()->customer_rate)->toBeNull();
+    });
+
+    // `string` alone let anything through to be stored as the rate of record and
+    // printed on a statement a client is handed.
+    it('refuses a cash amount or a rate that is not a positive number', function (string $field, string $value): void {
+        $usd = Currency::query()->where('code', 'USD')->sole();
+
+        $this->actingAs($this->operator)->post('/movements', movementPayload([
+            'amount' => '508500',
+            'cash_currency_id' => $usd->id,
+            'cash_amount' => '10000',
+            'rate' => '50.85',
+            $field => $value,
+        ]))->assertSessionHasErrors($field);
+    })->with([
+        ['cash_amount', 'abc'],
+        ['cash_amount', '0'],
+        ['cash_amount', '-10000'],
+        ['rate', 'fifty'],
+        ['rate', '0'],
+        ['rate', '-50.85'],
+    ]);
+
+    it('refuses a conversion on a movement that is not a client movement', function (): void {
+        $usd = Currency::query()->where('code', 'USD')->sole();
+
+        $this->actingAs($this->operator)->post('/movements', movementPayload([
+            'type' => 'fee',
+            'counterparty_id' => null,
+            'cash_currency_id' => $usd->id,
+            'cash_amount' => '10',
+            'rate' => '50',
+        ]))->assertSessionHasErrors('cash_currency_id');
     });
 });
 
@@ -195,182 +264,86 @@ describe('what it refuses', function (): void {
     })->with(['1e5', '1,000', 'abc']);
 });
 
-describe('the positions panel', function (): void {
-    it('shows all four positions, zeroes included', function (): void {
-        $response = $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-        ]);
-
-        $response->assertOk();
-
-        expect(array_keys($response->json('positions')))
-            ->toEqualCanonicalizing(['custody', 'receivable', 'payable', 'credit_trust']);
-    });
-
-    it('shows what the movement would leave behind', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '500000']));
-
-        $response = $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'credit_deposit',
-            'amount' => '200000',
-        ]);
-
-        $response->assertJsonPath('after.bucket', 'credit_trust')
-            ->assertJsonPath('after.amount.amount', '700000.00');
-    });
-
-    it('subtracts for a movement that reduces a position', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '500000']));
-
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
-            'amount' => '200000',
-        ])->assertJsonPath('after.amount.amount', '300000.00');
-    });
-
-    it('sends every amount as a string', function (): void {
-        $json = $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-        ])->content();
-
-        expect($json)->toContain('"amount":"0.00"');
-    });
-});
-
-/*
- * The owner's decision, recorded in posting-rules §9.4: a credit balance may go
- * negative, always allowed. A warning, never a block.
+/**
+ * What the operator sees before recording anything.
+ *
+ * One signed figure, and what it would become. Both, and said in words — "they owe us"
+ * or "we owe them" — because a minus sign is the easiest thing on a screen to misread.
  */
-describe('the negative credit warning', function (): void {
-    it('warns when paying out more than they left with us', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '100000']));
+describe('the balance panel', function (): void {
+    function ask(array $payload = []): TestResponse
+    {
+        $test = test();
 
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
-            'amount' => '150000',
-        ])->assertJsonPath('negative_warning', 'credit_trust')
-            ->assertJsonPath('after.amount.amount', '-50000.00');
+        return $test->actingAs($test->operator)->postJson('/movements/positions', [
+            'counterparty_id' => $test->party->id,
+            'currency_id' => $test->egp->id,
+            ...$payload,
+        ]);
+    }
+
+    it('reports zero for a party with no history', function (): void {
+        ask()->assertJsonPath('balance.amount', '0.00')
+            ->assertJsonPath('after', null);
     });
 
-    /*
-     * The mistake this was built for.
-     *
-     * A client leaves 400,000 with you. You pay them 100,000 and reach for "money
-     * paid" — which settles a *payable*, a debt from trade, and does not touch the
-     * credit at all. The payable goes to -100,000 and the 400,000 sits there untouched,
-     * which is correct and looks like a bug to whoever typed it.
-     *
-     * Naming the position that actually holds the money is what turns the warning into
-     * an answer.
-     */
-    it('names the position that does hold the money, and how to reach it', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '400000']));
+    it('shows where the movement would leave them', function (): void {
+        test()->actingAs(test()->operator)->post('/movements', movementPayload(['amount' => '500000']));
 
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'money_paid',
-            'amount' => '100000',
-        ])->assertJsonPath('negative_warning', 'payable')
-            ->assertJsonPath('instead.bucket', 'credit_trust')
-            ->assertJsonPath('instead.amount.amount', '400000.00')
-            ->assertJsonPath('instead.type', 'credit_settlement');
+        ask(['type' => 'in', 'amount' => '200000'])
+            ->assertJsonPath('balance.amount', '-500000.00')
+            ->assertJsonPath('after.amount', '-700000.00')
+            ->assertJsonPath('they_owe_us', false);
     });
 
-    // Money we owe is not money they owe. Suggesting one for the other would be worse
-    // than saying nothing at all.
-    it('never points across the two sides', function (): void {
-        // They owe us 50,000; nothing of theirs is in our hands.
-        $this->actingAs($this->operator)->post('/movements', movementPayload([
-            'type' => 'loan_given',
-            'amount' => '50000',
-        ]));
+    it('adds for a movement that goes out', function (): void {
+        test()->actingAs(test()->operator)->post('/movements', movementPayload(['amount' => '500000']));
 
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
-            'amount' => '10000',
-        ])->assertJsonPath('negative_warning', 'credit_trust')
-            ->assertJsonPath('instead', null);
+        ask(['type' => 'out', 'amount' => '200000'])
+            ->assertJsonPath('after.amount', '-300000.00');
     });
 
-    it('says nothing when there is no other position to point at', function (): void {
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'money_paid',
-            'amount' => '100000',
-        ])->assertJsonPath('negative_warning', 'payable')
-            ->assertJsonPath('instead', null);
+    // The moment worth flagging: they were holding our money and now they owe us, or
+    // the other way about. One movement, and the relationship reads the other way.
+    it('says when the relationship turns over', function (): void {
+        test()->actingAs(test()->operator)->post('/movements', movementPayload(['amount' => '100000']));
+
+        ask(['type' => 'out', 'amount' => '150000'])
+            ->assertJsonPath('after.amount', '50000.00')
+            ->assertJsonPath('they_owe_us', true)
+            ->assertJsonPath('turns_over', true);
     });
 
-    it('stays quiet when the balance covers it', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '500000']));
+    it('stays quiet when it does not', function (): void {
+        test()->actingAs(test()->operator)->post('/movements', movementPayload(['amount' => '100000']));
 
-        $this->actingAs($this->operator)->postJson('/movements/positions', [
-            'counterparty_id' => $this->party->id,
-            'currency_id' => $this->egp->id,
-            'type' => 'credit_settlement',
-            'amount' => '200000',
-        ])->assertJsonPath('negative_warning', null);
+        ask(['type' => 'out', 'amount' => '20000'])->assertJsonPath('turns_over', false);
     });
 
-    // Warned about, and then allowed. Blocking it would override a decision the owner
-    // made deliberately.
-    it('records the movement anyway', function (): void {
-        $this->actingAs($this->operator)->post('/movements', movementPayload(['amount' => '100000']));
-
-        $this->actingAs($this->operator)
-            ->post('/movements', movementPayload(['type' => 'credit_settlement', 'amount' => '150000']))
-            ->assertSessionHasNoErrors();
-
-        expect(bucketOf(BalanceBucket::CreditTrust))->toBe('-50000.00');
+    it('refuses the panel to somebody who cannot record', function (): void {
+        $this->actingAs($this->viewer)->postJson('/movements/positions', [
+            'counterparty_id' => $this->party->id,
+            'currency_id' => $this->egp->id,
+        ])->assertForbidden();
     });
 });
 
-/*
- * The form promises what each type will do. This checks the ledger agrees, for every
- * type that declares an effect — so the declaration on the enum and the posting rules
- * cannot drift apart without a test failing.
+/**
+ * What the form promises and what the ledger does cannot disagree.
+ *
+ * The form is told which way each type moves the balance; the posting rules move it.
+ * Two statements of one rule, so this asserts they agree.
  */
 describe('the declared effect matches the ledger', function (): void {
-    it('moves exactly the bucket it says, in the direction it says', function (): void {
-        $rules = app(PostingRules::class);
-        $posting = app(PostingService::class);
-        $resolver = app(LedgerAccountResolver::class);
+    it('moves the balance the way the form said it would', function (string $type, string $expected): void {
+        $this->actingAs($this->operator)->post('/movements', movementPayload(['type' => $type, 'amount' => '1000']));
 
-        foreach (TransactionType::cases() as $type) {
-            $effect = $type->bucketEffect();
+        $account = app(LedgerAccountResolver::class)->forCounterparty($this->party, $this->egp);
+        $balance = LedgerBalance::query()->where('ledger_account_id', $account->id)->sole()->confirmed();
 
-            if ($effect === null) {
-                continue;
-            }
-
-            $party = Counterparty::factory()->create();
-            $account = $resolver->forBucket($effect->bucket, $party, $this->egp);
-
-            $posting->post($rules->build(new TransactionInput(
-                type: $type,
-                currency: $this->egp,
-                amount: $this->egp->money('1000'),
-                occurredAt: now(),
-                account: $this->safe,
-                counterparty: $party,
-            )));
-
-            $balance = LedgerBalance::query()->where('ledger_account_id', $account->id)->sole()->confirmed();
-
-            expect($balance->toDisplayString())
-                ->toBe($effect->increases ? '1000.00' : '-1000.00', "{$type->value} moved the wrong way");
-        }
-    });
+        expect($balance->toDisplayString())->toBe($expected);
+    })->with([
+        ['in', '-1000.00'],
+        ['out', '1000.00'],
+    ]);
 });

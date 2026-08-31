@@ -35,7 +35,10 @@ export default defineConfig({
     },
 
     webServer: {
-        command: `DB_DATABASE=${DATABASE} php artisan serve --port=${PORT}`,
+        // Without --no-reload, Laravel's development reloader starts a child process
+        // from .env and loses the explicit e2e database override. The suite then signs
+        // into the developer database while its fixtures live in finance_e2e.
+        command: `DB_DATABASE=${DATABASE} php artisan serve --no-reload --port=${PORT}`,
         url: `http://127.0.0.1:${PORT}/login`,
         reuseExistingServer: false,
         timeout: 60_000,

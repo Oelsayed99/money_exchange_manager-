@@ -29,10 +29,10 @@ beforeEach(function (): void {
     $this->client = Counterparty::factory()->create(['name' => 'سالم التجريبي']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
     app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $this->egp,
         amount: $this->egp->money('3957540'),
         occurredAt: new DateTimeImmutable('2026-06-01'),
@@ -157,7 +157,7 @@ describe('formula injection', function (): void {
         $this->attacker = Counterparty::factory()->create(['name' => '=HYPERLINK("http://evil","click")']);
 
         app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money('100'),
             occurredAt: new DateTimeImmutable('2026-06-02'),
@@ -197,7 +197,7 @@ describe('the transactions export', function (): void {
     });
 
     it('honours the same filters as the list', function (): void {
-        expect(bytes(transactionsCsv('type=credit_deposit')))->toContain('REF-1')
+        expect(bytes(transactionsCsv('type=in')))->toContain('REF-1')
             ->and(bytes(transactionsCsv('type=expense')))->not->toContain('REF-1');
     });
 

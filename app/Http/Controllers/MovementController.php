@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Domain\Ledger\BucketEffect;
 use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
+use App\Domain\Tenancy\Owned;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionType;
 use App\Http\Requests\MovementRequest;
@@ -50,19 +49,20 @@ final class MovementController extends Controller
     }
 
     /**
-     * A counterparty's four positions, and what this movement would do to one of them.
+     * Where this party stands, and where this movement would leave them.
      *
-     * Shown before anything is recorded, because "add 500,000 to their credit" and
-     * "reduce what they owe by 500,000" are easy to confuse at the keyboard and
-     * impossible to confuse once the four positions are on screen next to each other.
+     * Shown before anything is recorded, because "they owe me" and "I am holding their
+     * money" are the same figure with a different sign, and a sign is the easiest thing
+     * on a screen to misread. Both are returned, and so is whether the relationship
+     * turns over.
      */
     public function positions(Request $request): JsonResponse
     {
         Gate::authorize('create', Transaction::class);
 
         $validated = $request->validate([
-            'counterparty_id' => ['required', 'integer', Rule::exists('counterparties', 'id')],
-            'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'counterparty_id' => ['required', 'integer', Owned::exists('counterparties', 'id')],
+            'currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
             'type' => ['nullable', Rule::enum(TransactionType::class)],
             'amount' => ['nullable', 'string'],
         ]);
@@ -70,41 +70,28 @@ final class MovementController extends Controller
         $counterparty = Counterparty::query()->findOrFail((int) $validated['counterparty_id']);
         $currency = Currency::query()->findOrFail((int) $validated['currency_id']);
 
-        $current = $this->currentPositions($counterparty, $currency);
+        $balance = $this->currentBalance($counterparty, $currency);
         $type = isset($validated['type']) ? TransactionType::tryFrom((string) $validated['type']) : null;
-        $effect = $type?->bucketEffect();
+        $effect = $type?->clientEffect();
 
         $after = null;
-        $warning = null;
-        $instead = null;
 
         if ($effect !== null && isset($validated['amount']) && $validated['amount'] !== '') {
             $amount = $currency->money((string) $validated['amount']);
-            $balance = $current[$effect->bucket->value] ?? Money::zero($currency->spec());
 
-            $result = $effect->increases ? $balance->plus($amount) : $balance->minus($amount);
-
-            $after = [
-                'bucket' => $effect->bucket->value,
-                'amount' => $result->jsonSerialize(),
-                'increases' => $effect->increases,
-            ];
-
-            // The owner's decision (docs/posting-rules.md §9.4): a credit balance may go
-            // negative, always allowed. A warning, never a block — a negative credit is
-            // really them owing us, and whether to reclassify it is a judgement the
-            // person at the counter is better placed to make than this code is.
-            if ($result->isNegative()) {
-                $warning = $effect->bucket->value;
-                $instead = $this->reachesTheMoney($effect, $current);
-            }
+            $after = $effect->increases()
+                ? $balance->plus($amount)
+                : $balance->minus($amount);
         }
 
         return response()->json([
-            'positions' => array_map(fn (Money $m): array => $m->jsonSerialize(), $current),
-            'after' => $after,
-            'negative_warning' => $warning,
-            'instead' => $instead,
+            // Signed, both of them: positive means they owe us.
+            'balance' => $balance->jsonSerialize(),
+            'after' => $after?->jsonSerialize(),
+            // Which way the relationship runs once this is recorded. Said outright,
+            // because a minus sign in front of a figure is the easiest thing to miss.
+            'they_owe_us' => ($after ?? $balance)->isPositive(),
+            'turns_over' => $after !== null && $balance->isPositive() !== $after->isPositive() && ! $after->isZero(),
         ]);
     }
 
@@ -118,70 +105,20 @@ final class MovementController extends Controller
     }
 
     /**
-     * The movement that would have found the money, when this one is about to miss it.
+     * Where this party stands with us in this currency, right now.
      *
-     * Paying a client out of the credit they left with you is a credit settlement, not
-     * a payment against a payable — different positions, on purpose. Choose the wrong
-     * one and the payable goes below zero while the credit sits untouched, which is
-     * exactly what the warning is about; naming the position that actually holds the
-     * money is what turns "this looks wrong" into "here is what you meant".
-     *
-     * Only ever the same side of the relationship. Money we owe is not money they owe,
-     * and suggesting one for the other would be worse than saying nothing.
-     *
-     * @param  array<string, Money>  $current
-     * @return array{bucket: string, bucket_label: string, amount: array{amount: string, currency: string}, type: string, type_label: string}|null
+     * One signed figure: positive means they owe us, negative that we are holding
+     * theirs. Zero is a real answer and is returned as one — "nothing either way" is
+     * different from "not checked".
      */
-    private function reachesTheMoney(BucketEffect $effect, array $current): ?array
+    private function currentBalance(Counterparty $counterparty, Currency $currency): Money
     {
-        foreach ($current as $value => $amount) {
-            $bucket = BalanceBucket::from($value);
+        $account = $this->accounts->forCounterparty($counterparty, $currency);
 
-            if ($bucket === $effect->bucket || $bucket->isAsset() !== $effect->bucket->isAsset() || ! $amount->isPositive()) {
-                continue;
-            }
-
-            foreach (TransactionType::cases() as $type) {
-                $other = $type->bucketEffect();
-
-                if ($type->recordableByHand() && $other?->bucket === $bucket && $other->increases === $effect->increases) {
-                    return [
-                        'bucket' => $bucket->value,
-                        'bucket_label' => $bucket->label(),
-                        'amount' => $amount->jsonSerialize(),
-                        'type' => $type->value,
-                        'type_label' => $type->label(),
-                    ];
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Every position this party holds in this currency, including the zeroes.
-     *
-     * Zeroes included on purpose: a bucket showing 0.00 says "nothing here", where a
-     * missing row leaves the reader to wonder whether it was checked.
-     *
-     * @return array<string, Money>
-     */
-    private function currentPositions(Counterparty $counterparty, Currency $currency): array
-    {
-        $positions = [];
-
-        foreach (BalanceBucket::cases() as $bucket) {
-            $account = $this->accounts->forBucket($bucket, $counterparty, $currency);
-
-            $balance = LedgerBalance::query()
-                ->where('ledger_account_id', $account->id)
-                ->first();
-
-            $positions[$bucket->value] = $balance?->confirmed() ?? Money::zero($currency->spec());
-        }
-
-        return $positions;
+        return LedgerBalance::query()
+            ->where('ledger_account_id', $account->id)
+            ->first()
+            ?->confirmed() ?? Money::zero($currency->spec());
     }
 
     /** @return array<string, mixed> */
@@ -201,9 +138,10 @@ final class MovementController extends Controller
                     'label' => __('transactions.types.'.$type->value),
                     'needsCounterparty' => $type->needsCounterparty(),
                     'needsDestinationAccount' => $type->needsDestinationAccount(),
-                    'needsBucket' => $type->needsBucket(),
-                    'bucket' => $type->bucketEffect()?->bucket->value,
-                    'increases' => $type->bucketEffect()?->increases,
+                    // Whether the money may be recorded in a currency other than the
+                    // one that moved — only the two client movements do that.
+                    'mayConvert' => $type->mayConvert(),
+                    'increases' => $type->clientEffect()?->increases(),
                 ],
                 $types,
             ),
@@ -219,14 +157,6 @@ final class MovementController extends Controller
                 ->get(['id', 'name'])
                 ->map(fn (Counterparty $c): array => ['id' => $c->id, 'name' => $c->name])
                 ->all(),
-            'buckets' => array_map(
-                fn (BalanceBucket $b): array => [
-                    'value' => $b->value,
-                    'label' => __('counterparties.buckets.'.$b->value),
-                    'position' => __('statements.positions.'.$b->value),
-                ],
-                BalanceBucket::cases(),
-            ),
             'methods' => array_map(
                 fn (MovementMethod $m): array => ['value' => $m->value, 'label' => __('transactions.methods.'.$m->value)],
                 MovementMethod::cases(),

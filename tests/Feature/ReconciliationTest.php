@@ -36,10 +36,9 @@ beforeEach(function (): void {
     $this->posting = app(PostingService::class);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
     $this->viewer = User::factory()->create();
-    $this->viewer->assignRole(Role::Viewer->value);
 });
 
 function deposited(string $amount, string $date = '2026-06-10'): void
@@ -310,8 +309,8 @@ describe('the screen', function (): void {
         $this->get('/reconciliations')->assertRedirect('/login');
     });
 
-    it('lets a viewer read but not record', function (): void {
-        $this->actingAs($this->viewer)->get('/reconciliations')->assertOk();
+    it('refuses somebody holding no role, reading or recording', function (): void {
+        $this->actingAs($this->viewer)->get('/reconciliations')->assertForbidden();
 
         $this->actingAs($this->viewer)->post('/reconciliations', [
             'account_id' => $this->safe->id,

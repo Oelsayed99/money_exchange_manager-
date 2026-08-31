@@ -134,41 +134,28 @@
 
 <hr style="border: 0; border-top: 0.8pt solid #111; margin: 6pt 0 10pt 0;" />
 
-@if ($statement->declaredOpening !== [])
+@if ($statement->declaredOpening !== null)
     <div class="warn small">
         <strong>{{ __('statements.declared_opening') }}</strong><br />
         {{ __('statements.declared_opening_body') }}
-        @foreach ($statement->declaredOpening as $bucket => $amount)
-            <br />{{ __('counterparties.buckets.'.$bucket) }}:
-            <span dir="ltr" class="num">{{ $amount->toGroupedString() }} {{ $statement->currency->code }}</span>
-        @endforeach
+        <br /><span dir="ltr" class="num">{{ $statement->declaredOpening->toGroupedString() }} {{ $statement->currency->code }}</span>
     </div>
 @endif
 
-{{-- The closing position, stated in words. Never one signed number: see ADR 0009. --}}
-@php
-    $live = array_values(array_filter(
-        $statement->buckets,
-        fn ($bucket) => ! $statement->closing[$bucket->value]->isZero(),
-    ));
-@endphp
+{{-- The closing balance, stated in words as well as figures.
 
-@if ($live === [])
+     One number now, where there were four. It is signed, and a minus sign on a page
+     somebody is holding is the easiest thing in the world to misread — so the sentence
+     beside it says which way it runs, and the figure is printed without its sign. --}}
+@if ($statement->closing->isZero())
     <p class="position">{{ __('statements.settled') }}</p>
 @else
-    <table width="100%" style="margin-bottom: 10pt;">
-        <tr>
-            @foreach ($live as $bucket)
-                <td class="position" width="{{ intdiv(100, count($live)) }}%">
-                    <div class="muted small">{{ __('statements.closing') }}</div>
-                    <div>{{ __('statements.positions.'.$bucket->value) }}</div>
-                    <div dir="ltr" class="num" style="font-size: 12pt;">
-                        {{ $statement->closing[$bucket->value]->toGroupedString() }} {{ $statement->currency->code }}
-                    </div>
-                </td>
-            @endforeach
-        </tr>
-    </table>
+    <p class="position">
+        <span class="muted small">{{ __('statements.closing') }}</span><br />
+        {{ $statement->theyOweUs()
+            ? __('statements.they_owe_us', ['amount' => $statement->closing->toGroupedString().' '.$statement->currency->code])
+            : __('statements.we_hold_theirs', ['amount' => $statement->closing->absolute()->toGroupedString().' '.$statement->currency->code]) }}
+    </p>
 @endif
 
 <table class="grid">
@@ -205,9 +192,13 @@
                 </td>
                 <td align="{{ $opposite }}">
                     <span dir="ltr" class="num">{{ $row->balanceAfter->toGroupedString() }}</span>
-                    {{-- Which position moved. Without it this is the old ambiguous
-                         running total again. --}}
-                    <div class="muted small">{{ __('statements.positions.'.$row->bucket->value) }}</div>
+                    {{-- What actually changed hands, when it was not this statement's
+                         currency: "10,000 USD at 50.85" beside a line booked in pounds. --}}
+                    @if ($row->movedAmount)
+                        <div class="muted small" dir="ltr">
+                            {{ $row->movedAmount->toGroupedString() }} {{ $row->movedAmount->currency->code }}@if ($row->rate) @ {{ $row->rate }}@endif
+                        </div>
+                    @endif
                 </td>
                 @if ($showsProfit)
                     <td align="{{ $opposite }}" class="num">
@@ -228,23 +219,21 @@
 
     @if ($statement->rows !== [])
         <tfoot>
-            @foreach ($statement->buckets as $bucket)
-                <tr>
-                    <td colspan="2" align="{{ $align }}">{{ __('counterparties.buckets.'.$bucket->value) }}</td>
-                    <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->totalIn[$bucket->value]->toGroupedString() }}</span>
-                    </td>
-                    <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->totalOut[$bucket->value]->toGroupedString() }}</span>
-                    </td>
-                    <td align="{{ $opposite }}" class="num">
-                        <span dir="ltr">{{ $statement->closing[$bucket->value]->toGroupedString() }}</span>
-                    </td>
-                    @if ($showsProfit)
-                        <td></td>
-                    @endif
-                </tr>
-            @endforeach
+            <tr>
+                <td colspan="2" align="{{ $align }}">{{ __('statements.totals') }}</td>
+                <td align="{{ $opposite }}" class="num">
+                    <span dir="ltr">{{ $statement->totalIn->toGroupedString() }}</span>
+                </td>
+                <td align="{{ $opposite }}" class="num">
+                    <span dir="ltr">{{ $statement->totalOut->toGroupedString() }}</span>
+                </td>
+                <td align="{{ $opposite }}" class="num">
+                    <span dir="ltr">{{ $statement->closing->toGroupedString() }}</span>
+                </td>
+                @if ($showsProfit)
+                    <td></td>
+                @endif
+            </tr>
         </tfoot>
     @endif
 </table>

@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Domain\Counterparty\OpeningPositionRecorder;
-use App\Domain\Money\Money;
 use App\Domain\Reporting\CounterpartyStanding;
 use App\Domain\Reporting\CounterpartyStandings;
-use App\Enums\BalanceBucket;
 use App\Enums\CounterpartyType;
 use App\Http\Requests\CounterpartyRequest;
 use App\Models\Counterparty;
@@ -58,7 +56,6 @@ final class CounterpartyController extends Controller
                     'standings' => $this->presentStandings($standings[$party->getKey()] ?? []),
                 ])
                 ->all(),
-            'buckets' => $this->buckets(),
         ]);
     }
 
@@ -71,13 +68,8 @@ final class CounterpartyController extends Controller
         return array_map(
             fn (CounterpartyStanding $standing): array => [
                 'code' => $standing->code,
-                // Strings, never JSON numbers (R1).
-                'ours' => $standing->ours->toDisplayString(),
-                'theirs' => $standing->theirs->toDisplayString(),
-                'buckets' => array_map(
-                    fn (Money $amount): string => $amount->toDisplayString(),
-                    $standing->buckets,
-                ),
+                // A string, never a JSON number (R1). Signed: positive means they owe us.
+                'balance' => $standing->balance->toDisplayString(),
             ],
             $standings,
         );
@@ -138,7 +130,6 @@ final class CounterpartyController extends Controller
                 ],
                 CounterpartyType::cases(),
             ),
-            'buckets' => $this->buckets(),
             'availableCurrencies' => Currency::query()
                 ->where('is_active', true)
                 ->orderBy('sort_order')
@@ -146,21 +137,6 @@ final class CounterpartyController extends Controller
                 ->map(fn (Currency $currency): array => ['id' => $currency->id, 'code' => $currency->code])
                 ->all(),
         ];
-    }
-
-    /** @return list<array{value: string, label: string, hint: string, isAsset: bool, mirror: string}> */
-    private function buckets(): array
-    {
-        return array_map(
-            fn (BalanceBucket $bucket): array => [
-                'value' => $bucket->value,
-                'label' => __('counterparties.buckets.'.$bucket->value),
-                'hint' => __('counterparties.bucket_hints.'.$bucket->value),
-                'isAsset' => $bucket->isAsset(),
-                'mirror' => $bucket->mirror()->value,
-            ],
-            BalanceBucket::cases(),
-        );
     }
 
     /** @return array<string, mixed> */
@@ -179,7 +155,6 @@ final class CounterpartyController extends Controller
             'is_active' => $party->is_active,
             'positions' => $party->openingBalances
                 ->map(fn (CounterpartyOpeningBalance $position): array => [
-                    'bucket' => $position->bucket->value,
                     'currency_id' => $position->currency_id,
                     'code' => $position->currency?->code,
                     // String, never a JSON number (R1).

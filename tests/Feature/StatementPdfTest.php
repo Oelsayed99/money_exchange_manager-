@@ -32,10 +32,10 @@ beforeEach(function (): void {
     $this->party = Counterparty::factory()->create(['name' => 'سالم التجريبي']);
 
     $this->operator = User::factory()->create();
-    $this->operator->assignRole(Role::Operator->value);
+    $this->operator->assignRole(Role::Owner->value);
 
     app(PostingService::class)->post(app(PostingRules::class)->build(new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $this->egp,
         amount: $this->egp->money('3957540'),
         occurredAt: new DateTimeImmutable('2026-06-01'),
@@ -170,13 +170,21 @@ describe('what reaches the client copy', function (): void {
     });
 });
 
-describe('the position on the page', function (): void {
-    it('states the position in words rather than a bare number', function (): void {
-        expect(statementHtml(StatementMode::Client))->toContain('Client credit with us');
+describe('the balance on the page', function (): void {
+    /*
+     * The closing balance is one signed number now, and a minus sign on a page somebody
+     * is holding is the easiest thing in the world to misread. So the page says which
+     * way it runs in words, and prints the figure without its sign. See ADR 0032.
+     */
+    it('says which way the balance runs, in words', function (): void {
+        $html = statementHtml(StatementMode::Client);
+
+        expect($html)->toContain('We are holding')
+            ->and($html)->toContain('3,957,540.00');
     });
 
-    it('never prints a single combined figure', function (): void {
-        expect(statementHtml(StatementMode::Client))->toContain('3,957,540.00');
+    it('prints the figure without a minus sign beside those words', function (): void {
+        expect(statementHtml(StatementMode::Client))->not->toContain('-3,957,540.00 EGP.');
     });
 });
 

@@ -12,29 +12,29 @@ return [
     'description' => 'Where everything stands, and what moved.',
 
     /*
-     * The owner's three cases in their own words, plus the fourth the four-bucket
-     * model makes possible and which naming as either one would misrepresent.
+     * Which way a client's balances run. "Both ways" is possible because currencies
+     * are never added together: they can owe us dollars while we owe them pounds.
      */
     'statuses' => [
         'owes_us' => 'They owe us',
-        'has_credit' => 'They have credit',
-        'mixed' => 'Both',
+        'has_credit' => 'We owe them',
+        'mixed' => 'Both ways',
         'settled' => 'Settled',
     ],
     'status_hints' => [
-        'owes_us' => 'They hold our money or owe it to us.',
-        'has_credit' => 'We hold their money or owe it to them.',
-        'mixed' => 'Live positions on both sides. These are not netted.',
-        'settled' => 'Nobody owes anybody anything.',
+        'owes_us' => 'The balance runs our way in every currency they are carrying.',
+        'has_credit' => 'We are holding money of theirs, or owe it to them.',
+        'mixed' => 'They owe us in one currency and we owe them in another. Currencies are never added together.',
+        'settled' => 'Nothing either way.',
     ],
 
     'cards' => [
         'cash_on_hand' => 'Cash on hand',
         'cash_on_hand_hint' => 'In our own custody locations. Not narrowed by client.',
         'owed_to_us' => 'Owed to us',
-        'owed_to_us_hint' => 'Receivables plus our money held by others.',
+        'owed_to_us_hint' => 'Every client balance that runs our way, added up per currency.',
         'owed_to_them' => 'Owed to them',
-        'owed_to_them_hint' => 'Payables plus client credit we are holding.',
+        'owed_to_them_hint' => 'Every client balance that runs their way, added up per currency.',
         'profit' => 'Margin earned',
         'profit_hint' => 'In the period shown, in the currency it was earned in.',
         'received' => 'In from clients',
@@ -67,14 +67,14 @@ return [
     ],
     'top' => [
         'title' => 'Largest positions',
-        'hint' => 'Both sides shown separately. A client can be on both, and the two are never netted.',
+        'hint' => 'The largest balances either way, in one currency. Currencies are never added together.',
     ],
 
     'parties' => [
         'title' => 'Clients',
         'name' => 'Client',
         'status' => 'Status',
-        'positions' => 'Positions',
+        'balance' => 'Balance',
         'statement' => 'Statement',
         'none' => 'No client matches these filters.',
     ],

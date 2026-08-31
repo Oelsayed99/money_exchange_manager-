@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
-use App\Domain\Ledger\BucketEffect;
-
 /**
- * The nineteen transaction types of Section 6.
+ * Every kind of movement the ledger records.
  *
- * Each maps to a posting rule in docs/posting-rules.md §3. Several types produce
- * identical entries — money received from a party and a receivable settlement, for
- * instance — and are kept apart because the intent differs and reporting needs to
- * distinguish them. The type is stored; the entries do not have to differ for the
- * distinction to survive.
+ * Each maps to a posting rule in docs/posting-rules.md §3.
+ *
+ * ## In and Out replaced nine types
+ *
+ * Money received, money paid, a loan given, a loan received, a receivable settlement, a
+ * payable settlement, a credit deposit, a credit settlement and a refund were nine
+ * names for two events: money came in from somebody, or money went out to them. Several
+ * of them already produced identical entries and were kept apart only by intent — and
+ * asking an operator at the counter to classify intent is asking them to get it wrong.
+ *
+ * What remains of the distinction is the running balance: out beyond in means they owe
+ * us, in beyond out means we are holding theirs. See ADR 0032.
  */
 enum TransactionType: string
 {
@@ -21,15 +26,13 @@ enum TransactionType: string
     case Deposit = 'deposit';
     case Withdrawal = 'withdrawal';
     case Transfer = 'transfer';
-    case MoneyReceived = 'money_received';
-    case MoneyPaid = 'money_paid';
-    case LoanGiven = 'loan_given';
-    case LoanReceived = 'loan_received';
-    case ReceivableSettlement = 'receivable_settlement';
-    case PayableSettlement = 'payable_settlement';
+    /** Money we took from somebody, whatever the reason. */
+    case In = 'in';
+
+    /** Money we paid to somebody, whatever the reason. */
+    case Out = 'out';
+
     case CurrencyExchange = 'currency_exchange';
-    case CreditDeposit = 'credit_deposit';
-    case CreditSettlement = 'credit_settlement';
     case Fee = 'fee';
     case Expense = 'expense';
     case ProfitAdjustment = 'profit_adjustment';
@@ -48,10 +51,10 @@ enum TransactionType: string
         return __('transactions.types.'.$this->value);
     }
 
-    /** Whether this type may carry a rate and produce profit (Phase 4). */
+    /** Whether this type prices a margin. Only the exchange screen does that. */
     public function isExchange(): bool
     {
-        return in_array($this, [self::CurrencyExchange, self::CreditSettlement], true);
+        return $this === self::CurrencyExchange;
     }
 
     /**
@@ -81,7 +84,7 @@ enum TransactionType: string
     /** Whether the movement is between the business and somebody else. */
     public function needsCounterparty(): bool
     {
-        return $this->bucketEffect() !== null;
+        return $this->clientEffect() !== null;
     }
 
     /** Whether it moves money between two of our own locations. */
@@ -91,42 +94,29 @@ enum TransactionType: string
     }
 
     /**
-     * Whether the operator must say which position it opens.
+     * Whether the amount may be recorded in a currency other than the one that moved.
      *
-     * Only an opening balance: every other type's bucket follows from what it is,
-     * which is the point of having types at all.
+     * Take 10,000 dollars and record it against the client as pounds at an agreed rate;
+     * pay a client's pounds out to them in euros. Both are one movement with two
+     * currencies, and both facts are kept. Only client movements do this — our own cash
+     * and our own capital move in one currency by definition.
      */
-    public function needsBucket(): bool
+    public function mayConvert(): bool
     {
-        return $this === self::OpeningBalance;
+        return $this->clientEffect() !== null;
     }
 
     /**
-     * Which of a counterparty's positions this moves, and which way.
+     * Which way this moves the client's running balance, if it moves it at all.
      *
-     * Read against the posting rules, not invented: money in against what they owe
-     * *reduces* the receivable, while lending *increases* it, and both are cash
-     * crossing the counter in opposite directions. See docs/posting-rules.md §2.
+     * Out is positive: paying somebody puts them into debt to us, or works off what we
+     * owed them. In is the reverse. Everything else leaves the relationship alone.
      */
-    public function bucketEffect(): ?BucketEffect
+    public function clientEffect(): ?ClientEffect
     {
         return match ($this) {
-            // They pay us: what they owe shrinks.
-            self::MoneyReceived, self::ReceivableSettlement => new BucketEffect(BalanceBucket::Receivable, false),
-
-            // We hand money over against a promise: what they owe grows.
-            self::LoanGiven => new BucketEffect(BalanceBucket::Receivable, true),
-
-            // We take money on a promise: what we owe grows.
-            self::LoanReceived => new BucketEffect(BalanceBucket::Payable, true),
-
-            // We pay them: what we owe shrinks.
-            self::MoneyPaid, self::PayableSettlement, self::Refund => new BucketEffect(BalanceBucket::Payable, false),
-
-            // Their money, into and out of our keeping.
-            self::CreditDeposit => new BucketEffect(BalanceBucket::CreditTrust, true),
-            self::CreditSettlement => new BucketEffect(BalanceBucket::CreditTrust, false),
-
+            self::Out => ClientEffect::TheyOweUsMore,
+            self::In => ClientEffect::WeOweThemMore,
             default => null,
         };
     }

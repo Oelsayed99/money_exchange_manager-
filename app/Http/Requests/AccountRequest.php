@@ -6,6 +6,7 @@ namespace App\Http\Requests;
 
 use App\Domain\Money\Decimal;
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\Owned;
 use App\Enums\AccountType;
 use App\Models\Account;
 use Illuminate\Foundation\Http\FormRequest;
@@ -30,7 +31,7 @@ final class AccountRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', Rule::enum(AccountType::class)],
-            'counterparty_id' => ['nullable', 'integer', Rule::exists('counterparties', 'id')->whereNull('deleted_at')],
+            'counterparty_id' => ['nullable', 'integer', Owned::exists('counterparties', 'id')->whereNull('deleted_at')],
             'owner' => ['nullable', 'string', 'max:255'],
             'provider' => ['nullable', 'string', 'max:255'],
             'identifier' => ['nullable', 'string', 'max:255'],
@@ -40,7 +41,7 @@ final class AccountRequest extends FormRequest
             'icon' => ['nullable', 'string', 'max:50'],
 
             'currencies' => ['array'],
-            'currencies.*.currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')],
+            'currencies.*.currency_id' => ['required', 'integer', Owned::exists('currencies', 'id')],
 
             // A plain decimal string, never a float: the amount crosses the wire as
             // text precisely so nothing can round it on the way in.

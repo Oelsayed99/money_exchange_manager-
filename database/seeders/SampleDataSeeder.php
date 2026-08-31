@@ -125,7 +125,7 @@ final class SampleDataSeeder extends Seeder
      */
     private function users(): void
     {
-        foreach ([Role::Operator, Role::Viewer] as $role) {
+        foreach ([Role::Owner, Role::Owner] as $role) {
             $user = User::query()->firstOrCreate(
                 ['email' => $role->value.'@monymonk.test'],
                 [
@@ -215,20 +215,24 @@ final class SampleDataSeeder extends Seeder
         $recorder = app(OpeningPositionRecorder::class);
         $at = new DateTimeImmutable(self::START);
 
+        // Signed: negative means we were already holding money of theirs.
         $positions = [
-            0 => [['credit_trust', 'EGP', '899510'], ['receivable', 'EGP', '14890']],
-            1 => [['payable', 'AED', '120000'], ['custody', 'AED', '45000']],
-            4 => [['payable', 'AED', '78000']],
+            0 => ['EGP' => '-884620'],
+            1 => ['AED' => '-75000'],
+            4 => ['AED' => '-78000', 'USD' => '12500'],
         ];
 
         foreach ($positions as $index => $rows) {
             $recorder->sync(
                 $this->parties[$index],
-                array_map(fn (array $row): array => [
-                    'bucket' => $row[0],
-                    'currency_id' => $this->currency[$row[1]]->id,
-                    'amount' => $row[2],
-                ], $rows),
+                array_map(
+                    fn (string $code, string $amount): array => [
+                        'currency_id' => $this->currency[$code]->id,
+                        'amount' => $amount,
+                    ],
+                    array_keys($rows),
+                    array_values($rows),
+                ),
                 $at,
             );
 
@@ -330,7 +334,7 @@ final class SampleDataSeeder extends Seeder
         $code = mt_rand(1, 3) === 1 ? 'USD' : 'EGP';
 
         $this->post(new TransactionInput(
-            type: mt_rand(1, 3) === 1 ? TransactionType::CreditSettlement : TransactionType::CreditDeposit,
+            type: mt_rand(1, 3) === 1 ? TransactionType::Out : TransactionType::In,
             currency: $this->currency[$code],
             amount: $this->currency[$code]->money((string) (mt_rand(2, 60) * 5000)),
             occurredAt: $day->toDateTimeImmutable(),
@@ -346,7 +350,7 @@ final class SampleDataSeeder extends Seeder
         $code = mt_rand(1, 2) === 1 ? 'EGP' : 'USD';
 
         $this->post(new TransactionInput(
-            type: mt_rand(1, 2) === 1 ? TransactionType::LoanGiven : TransactionType::LoanReceived,
+            type: mt_rand(1, 2) === 1 ? TransactionType::Out : TransactionType::In,
             currency: $this->currency[$code],
             amount: $this->currency[$code]->money((string) (mt_rand(1, 40) * 2500)),
             occurredAt: $day->toDateTimeImmutable(),
@@ -362,12 +366,7 @@ final class SampleDataSeeder extends Seeder
         $code = mt_rand(1, 2) === 1 ? 'EGP' : 'AED';
 
         $this->post(new TransactionInput(
-            type: match (mt_rand(1, 4)) {
-                1 => TransactionType::ReceivableSettlement,
-                2 => TransactionType::PayableSettlement,
-                3 => TransactionType::MoneyReceived,
-                default => TransactionType::MoneyPaid,
-            },
+            type: mt_rand(1, 2) === 1 ? TransactionType::In : TransactionType::Out,
             currency: $this->currency[$code],
             amount: $this->currency[$code]->money((string) (mt_rand(1, 30) * 1500)),
             occurredAt: $day->toDateTimeImmutable(),
@@ -435,7 +434,7 @@ final class SampleDataSeeder extends Seeder
             $currency = $this->currency[$n % 2 === 0 ? 'USD' : 'EGP'];
 
             $this->post(new TransactionInput(
-                type: TransactionType::CreditSettlement,
+                type: TransactionType::Out,
                 currency: $currency,
                 amount: $currency->money((string) ($n * 7500)),
                 occurredAt: $day->copy()->addDays($n % 3)->toDateTimeImmutable(),

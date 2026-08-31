@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Domain\Tenancy\Owned;
 use App\Enums\AuditEvent;
 use App\Models\Account;
 use App\Models\AuditLog;
@@ -43,7 +44,7 @@ final class AuditLogController extends Controller
         $validated = $request->validate([
             'event' => ['nullable', Rule::enum(AuditEvent::class)],
             'type' => ['nullable', 'string', Rule::in($this->auditedTypes()->keys()->all())],
-            'user' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'user' => ['nullable', 'integer', Owned::exists('users', 'id')],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'search' => ['nullable', 'string', 'max:255'],

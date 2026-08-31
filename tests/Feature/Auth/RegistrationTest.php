@@ -20,6 +20,8 @@ class RegistrationTest extends TestCase
     {
         $response = $this->post('/register', [
             'name' => 'Test User',
+            // Signing up creates a business; it needs a name. See RegistrationRoleTest.
+            'business_name' => 'Test Exchange',
             'email' => 'test@example.com',
             'password' => 'password',
             'password_confirmation' => 'password',

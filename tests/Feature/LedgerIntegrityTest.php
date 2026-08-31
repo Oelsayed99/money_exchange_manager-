@@ -7,7 +7,6 @@ use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\TransactionType;
 use App\Models\Account;
 use App\Models\Counterparty;
@@ -36,7 +35,7 @@ function deposit(string $amount): void
     $test = test();
 
     $test->posting->post($test->rules->build(new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $test->egp,
         amount: $test->egp->money($amount),
         occurredAt: now(),
@@ -64,7 +63,7 @@ describe('ledger:verify', function (): void {
     it('detects a tampered cache and exits non-zero', function (): void {
         deposit('1000');
 
-        $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+        $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
         DB::table('ledger_balances')
             ->where('ledger_account_id', $credit->id)
@@ -78,7 +77,7 @@ describe('ledger:verify', function (): void {
     it('names the account and both figures', function (): void {
         deposit('1000');
 
-        $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+        $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
         DB::table('ledger_balances')->where('ledger_account_id', $credit->id)
             ->update(['confirmed_amount' => '7.0000000000']);
@@ -110,7 +109,7 @@ describe('ledger:rebuild', function (): void {
         deposit('1000');
         deposit('500');
 
-        $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+        $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
         DB::table('ledger_balances')->where('ledger_account_id', $credit->id)
             ->update(['confirmed_amount' => '0']);
@@ -118,7 +117,7 @@ describe('ledger:rebuild', function (): void {
         $this->artisan('ledger:rebuild')->assertExitCode(0);
 
         expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
-            ->toBe('1500.00');
+            ->toBe('-1500.00');
 
         $this->artisan('ledger:verify')->assertExitCode(0);
     });
@@ -156,7 +155,7 @@ describe('ledger:rebuild', function (): void {
     it('agrees with the posting service about reversals', function (): void {
         deposit('1000');
         $second = $this->posting->post($this->rules->build(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money('400'),
             occurredAt: now(),
@@ -170,10 +169,10 @@ describe('ledger:rebuild', function (): void {
         $this->artisan('ledger:rebuild')->assertExitCode(0);
         $this->artisan('ledger:verify')->assertExitCode(0);
 
-        $credit = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+        $credit = $this->resolver->forCounterparty($this->party, $this->egp);
 
         expect(LedgerBalance::query()->where('ledger_account_id', $credit->id)->sole()->confirmed()->toDisplayString())
-            ->toBe('1000.00');
+            ->toBe('-1000.00');
     });
 });
 

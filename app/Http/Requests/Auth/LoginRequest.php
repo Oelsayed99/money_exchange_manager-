@@ -42,7 +42,11 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        // Always remembered. The owner's instruction was that a session ends when
+        // somebody signs out and at no other time; a "remember me" box that has to be
+        // ticked is the same setting with a chance to get it wrong. See
+        // config/session.php for the trade this makes.
+        if (! Auth::attempt($this->only('email', 'password'), remember: true)) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([

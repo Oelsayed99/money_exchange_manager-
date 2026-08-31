@@ -6,7 +6,6 @@ namespace App\Domain\Ledger;
 
 use App\Domain\Money\Exceptions\CurrencyMismatch;
 use App\Domain\Money\Money;
-use App\Enums\BalanceBucket;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
@@ -34,16 +33,18 @@ final readonly class TransactionInput
         public ?Account $account = null,
         public ?Account $destinationAccount = null,
         public ?Counterparty $counterparty = null,
-        public ?BalanceBucket $bucket = null,
         /**
-         * Whether an opening position is being opened or unwound.
+         * The money that physically moved, when it is not the currency being recorded.
          *
-         * A declared position can be corrected after it has been posted, and the ledger
-         * has no way to un-post: the correction is a second transaction with the two
-         * accounts the other way round. The amount stays positive — this is what says
-         * which direction it went, exactly as the type does everywhere else.
+         * Take 10,000 dollars from a client and record it against them as pounds: the
+         * cash side is 10,000 USD, the client's side is the converted figure, and both
+         * are facts worth keeping. Null means the two are the same, which is the
+         * ordinary case.
          */
-        public bool $increasesBucket = true,
+        public ?Currency $cashCurrency = null,
+        public ?Money $cashAmount = null,
+        /** What the two were converted at, kept for the record rather than recomputed. */
+        public ?string $rate = null,
         public ?MovementMethod $method = null,
         public ?string $reference = null,
         public ?string $description = null,
@@ -55,10 +56,21 @@ final readonly class TransactionInput
             throw CurrencyMismatch::between($amount->currency, $currency->spec(), 'record');
         }
 
-        if (! $amount->isPositive()) {
+        if ($cashAmount instanceof Money && $cashCurrency instanceof Currency && ! $cashAmount->currency->is($cashCurrency->spec())) {
+            throw CurrencyMismatch::between($cashAmount->currency, $cashCurrency->spec(), 'record the cash side of');
+        }
+
+        // An opening position is the one signed amount in the system: it says where a
+        // relationship started, and it can start either way round. Everywhere else the
+        // type says which way the money moved, and a negative amount would say it twice.
+        $signed = $type === TransactionType::OpeningBalance && $counterparty !== null;
+
+        if ($amount->isZero() || (! $signed && $amount->isNegative())) {
             throw new InvalidArgumentException(
-                'A transaction amount must be positive. The transaction type says which way the '
-                ."money moved; a negative amount would say it twice. Got [{$amount->toStorageString()}]."
+                $signed
+                    ? 'An opening position of zero says nothing. Leave it out instead.'
+                    : 'A transaction amount must be positive. The transaction type says which way the '
+                      ."money moved; a negative amount would say it twice. Got [{$amount->toStorageString()}]."
             );
         }
     }
@@ -82,8 +94,9 @@ final readonly class TransactionInput
             'account_id' => $this->account?->getKey(),
             'destination_account_id' => $this->destinationAccount?->getKey(),
             'counterparty_id' => $this->counterparty?->getKey(),
-            'bucket' => $this->bucket?->value,
-            'increases_bucket' => $this->increasesBucket,
+            'cash_currency_id' => $this->cashCurrency?->getKey(),
+            'cash_amount' => $this->cashAmount?->toStorageString(),
+            'rate' => $this->rate,
             'method' => $this->method?->value,
             'reference' => $this->reference,
             'description' => $this->description,
@@ -101,6 +114,10 @@ final readonly class TransactionInput
         // collection, which is not what any of these fields mean.
         $currency = Currency::query()->findOrFail((int) $payload['currency_id']);
 
+        $cashCurrency = isset($payload['cash_currency_id'])
+            ? Currency::query()->find((int) $payload['cash_currency_id'])
+            : null;
+
         return new self(
             type: TransactionType::from((string) $payload['type']),
             currency: $currency,
@@ -113,8 +130,11 @@ final readonly class TransactionInput
             counterparty: isset($payload['counterparty_id'])
                 ? Counterparty::query()->find((int) $payload['counterparty_id'])
                 : null,
-            bucket: isset($payload['bucket']) ? BalanceBucket::from((string) $payload['bucket']) : null,
-            increasesBucket: (bool) ($payload['increases_bucket'] ?? true),
+            cashCurrency: $cashCurrency,
+            cashAmount: $cashCurrency instanceof Currency && isset($payload['cash_amount'])
+                ? $cashCurrency->money((string) $payload['cash_amount'])
+                : null,
+            rate: $payload['rate'] ?? null,
             method: isset($payload['method']) ? MovementMethod::from((string) $payload['method']) : null,
             reference: $payload['reference'] ?? null,
             description: $payload['description'] ?? null,
@@ -143,10 +163,23 @@ final readonly class TransactionInput
         );
     }
 
-    public function requireBucket(): BalanceBucket
+    /** Whether the money that moved was in a different currency from the record. */
+    public function converts(): bool
     {
-        return $this->bucket ?? throw new InvalidArgumentException(
-            "A {$this->type->value} against a counterparty needs a bucket, but none was given."
-        );
+        return $this->cashCurrency instanceof Currency
+            && $this->cashAmount instanceof Money
+            && ! $this->cashCurrency->spec()->is($this->currency->spec());
+    }
+
+    /** The currency the cash actually moved in — the recorded one unless it converted. */
+    public function movedCurrency(): Currency
+    {
+        return $this->converts() && $this->cashCurrency instanceof Currency ? $this->cashCurrency : $this->currency;
+    }
+
+    /** The amount of cash that actually moved. */
+    public function movedAmount(): Money
+    {
+        return $this->converts() && $this->cashAmount instanceof Money ? $this->cashAmount : $this->amount;
     }
 }

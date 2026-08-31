@@ -15,17 +15,18 @@ enum LedgerAccountSubkind: string
     /** Money in a custody location. Owned by an Account. */
     case Cash = 'cash';
 
-    /** Our money, physically held by them. Owned by a Counterparty. */
-    case Custody = 'custody';
-
-    /** Their money, owed to us. Owned by a Counterparty. */
-    case Receivable = 'receivable';
-
-    /** Our money, owed to them. Owned by a Counterparty. */
-    case Payable = 'payable';
-
-    /** Their money, physically held by us. Owned by a Counterparty. */
-    case CreditTrust = 'credit_trust';
+    /**
+     * One running account per counterparty per currency.
+     *
+     * There were four here — custody, receivable, payable, credit held — kept apart so
+     * that "they owe me" and "I am holding their money" could never be confused. In use
+     * that turned out to be four ways of describing one relationship: money went out to
+     * them, money came in from them, and what matters is which way the difference runs.
+     *
+     * An asset, so the sign reads the way the owner thinks: **positive means they owe
+     * us**, negative means we are holding theirs. See ADR 0032.
+     */
+    case ClientAccount = 'client_account';
 
     /** The open leg of an exchange. System-owned, one per currency. */
     case FxPosition = 'fx_position';
@@ -47,8 +48,7 @@ enum LedgerAccountSubkind: string
     public function kind(): LedgerAccountKind
     {
         return match ($this) {
-            self::Cash, self::Custody, self::Receivable => LedgerAccountKind::Asset,
-            self::Payable, self::CreditTrust => LedgerAccountKind::Liability,
+            self::Cash, self::ClientAccount => LedgerAccountKind::Asset,
             self::FxPosition => LedgerAccountKind::Clearing,
             self::TradingProfit, self::FeesIncome => LedgerAccountKind::Income,
             self::Expense, self::CommissionExpense => LedgerAccountKind::Expense,
@@ -61,36 +61,15 @@ enum LedgerAccountSubkind: string
     {
         return match ($this) {
             self::Cash => LedgerOwnerType::Account,
-            self::Custody, self::Receivable, self::Payable, self::CreditTrust => LedgerOwnerType::Counterparty,
+            self::ClientAccount => LedgerOwnerType::Counterparty,
             default => LedgerOwnerType::System,
         };
     }
 
-    /**
-     * The counterparty bucket this subkind corresponds to, if any.
-     *
-     * The bridge between the ledger and the four positions of Section 5, so that a
-     * party's statement and their ledger accounts cannot drift apart.
-     */
-    public function bucket(): ?BalanceBucket
+    /** Whether this account belongs to a counterparty rather than to us or the system. */
+    public function isCounterpartyPosition(): bool
     {
-        return match ($this) {
-            self::Custody => BalanceBucket::Custody,
-            self::Receivable => BalanceBucket::Receivable,
-            self::Payable => BalanceBucket::Payable,
-            self::CreditTrust => BalanceBucket::CreditTrust,
-            default => null,
-        };
-    }
-
-    public static function forBucket(BalanceBucket $bucket): self
-    {
-        return match ($bucket) {
-            BalanceBucket::Custody => self::Custody,
-            BalanceBucket::Receivable => self::Receivable,
-            BalanceBucket::Payable => self::Payable,
-            BalanceBucket::CreditTrust => self::CreditTrust,
-        };
+        return $this === self::ClientAccount;
     }
 
     public function label(): string

@@ -40,6 +40,11 @@ const PUBLIC_ROUTES = [
     'GET verify-email/{id}/{hash}' => 'Following a signed verification link.',
     // Laravel's health check. Reveals only that the application is running.
     'GET up' => 'Health check.',
+    // Signing in through a provider. Both are guest routes by necessity — the person
+    // is not signed in yet, which is the point — and the callback is protected by the
+    // state it has to match, not by the session having a user in it.
+    'GET auth/{provider}/redirect' => 'Leaving for a provider to sign in.',
+    'GET auth/{provider}/callback' => 'Coming back from a provider.',
 ];
 
 function appRoutes(): array

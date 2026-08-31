@@ -10,7 +10,6 @@ use App\Domain\Ledger\PostingRequest;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Money\CurrencyRegistry;
 use App\Domain\Money\Exceptions\CurrencyMismatch;
-use App\Enums\BalanceBucket;
 use App\Enums\EntryDirection;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\MovementMethod;
@@ -43,8 +42,8 @@ beforeEach(function (): void {
 
     $this->cashEgp = $this->resolver->forAccount($this->safe, $this->egp);
     $this->cashUsd = $this->resolver->forAccount($this->safe, $this->usd);
-    $this->creditEgp = $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
-    $this->receivableEgp = $this->resolver->forBucket(BalanceBucket::Receivable, $this->party, $this->egp);
+    $this->creditEgp = $this->resolver->forCounterparty($this->party, $this->egp);
+    $this->receivableEgp = $this->resolver->forCounterparty($this->party, $this->egp);
 });
 
 /** A credit deposit: money in, liability up. */
@@ -54,7 +53,7 @@ function creditDeposit(string $amount, ?string $key = null, TransactionStatus $s
     $money = $test->egp->money($amount);
 
     return new PostingRequest(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         occurredAt: now(),
         entries: [
             EntryDraft::debit($test->cashEgp, $money),
@@ -78,7 +77,7 @@ describe('the balancing invariant', function (): void {
 
     it('refuses a transaction whose sides do not agree', function (): void {
         expect(fn () => $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -89,7 +88,7 @@ describe('the balancing invariant', function (): void {
 
     it('reports the difference so the mistake is findable', function (): void {
         expect(fn () => $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -145,7 +144,7 @@ describe('the balancing invariant', function (): void {
     it('writes nothing at all when a posting is refused', function (): void {
         try {
             $this->posting->post(new PostingRequest(
-                type: TransactionType::CreditDeposit,
+                type: TransactionType::In,
                 occurredAt: now(),
                 entries: [
                     EntryDraft::debit($this->cashEgp, $this->egp->money('100')),
@@ -186,9 +185,10 @@ describe('balances', function (): void {
         $cash = LedgerBalance::query()->where('ledger_account_id', $this->cashEgp->id)->sole();
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        // Both positive: each account holds what its kind implies it should.
+        // Cash came in, so it rises. The client's account falls by the same amount:
+        // they have given us more than we have given them.
         expect($cash->confirmed()->toDisplayString())->toBe('581000.00')
-            ->and($credit->confirmed()->toDisplayString())->toBe('581000.00');
+            ->and($credit->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     // The nine tranches from the real statement.
@@ -199,14 +199,14 @@ describe('balances', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('3957540.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-3957540.00');
     });
 
     it('decreases a liability when it is settled', function (): void {
         $this->posting->post(creditDeposit('3957540'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditSettlement,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->creditEgp, $this->egp->money('2574000')),
@@ -218,14 +218,14 @@ describe('balances', function (): void {
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
         // Matches the statement exactly.
-        expect($credit->confirmed()->toDisplayString())->toBe('1383540.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-1383540.00');
     });
 
     it('lets a liability go negative, as decided', function (): void {
         $this->posting->post(creditDeposit('100'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::CreditSettlement,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->creditEgp, $this->egp->money('150')),
@@ -235,7 +235,7 @@ describe('balances', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('-50.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('50.00');
     });
 
     it('keeps each currency on its own account', function (): void {
@@ -251,7 +251,7 @@ describe('pending and available', function (): void {
         $this->posting->post(creditDeposit('1000'));
 
         $this->posting->post(new PostingRequest(
-            type: TransactionType::MoneyPaid,
+            type: TransactionType::Out,
             occurredAt: now(),
             entries: [
                 EntryDraft::debit($this->receivableEgp, $this->egp->money('300')),
@@ -293,7 +293,7 @@ describe('duplicate submission', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('581000.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     it('treats postings without a key as distinct', function (): void {
@@ -376,7 +376,7 @@ describe('reversal', function (): void {
 
         $credit = LedgerBalance::query()->where('ledger_account_id', $this->creditEgp->id)->sole();
 
-        expect($credit->confirmed()->toDisplayString())->toBe('100.00');
+        expect($credit->confirmed()->toDisplayString())->toBe('-100.00');
     });
 
     it('carries its own date rather than rewriting the original period', function (): void {

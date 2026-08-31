@@ -8,7 +8,6 @@ use App\Domain\Ledger\PostingRules;
 use App\Domain\Ledger\PostingService;
 use App\Domain\Ledger\TransactionInput;
 use App\Domain\Money\CurrencyRegistry;
-use App\Enums\BalanceBucket;
 use App\Enums\MovementMethod;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
@@ -36,7 +35,7 @@ beforeEach(function (): void {
     $this->party = Counterparty::factory()->create();
 
     $this->input = fn (string $amount = '581000'): TransactionInput => new TransactionInput(
-        type: TransactionType::CreditDeposit,
+        type: TransactionType::In,
         currency: $this->egp,
         amount: $this->egp->money($amount),
         occurredAt: now(),
@@ -46,7 +45,7 @@ beforeEach(function (): void {
         reference: 'REF-1',
     );
 
-    $this->creditAccount = fn () => $this->resolver->forBucket(BalanceBucket::CreditTrust, $this->party, $this->egp);
+    $this->creditAccount = fn () => $this->resolver->forCounterparty($this->party, $this->egp);
 });
 
 describe('creating a draft', function (): void {
@@ -72,7 +71,7 @@ describe('creating a draft', function (): void {
     // it, not days later when it is committed.
     it('refuses a draft that could never be posted', function (): void {
         expect(fn () => $this->posting->draft(new TransactionInput(
-            type: TransactionType::CreditDeposit,
+            type: TransactionType::In,
             currency: $this->egp,
             amount: $this->egp->money('100'),
             occurredAt: now(),
@@ -93,7 +92,7 @@ describe('committing a draft', function (): void {
         expect($posted->status)->toBe(TransactionStatus::Posted)
             ->and($posted->entries)->toHaveCount(2)
             ->and(LedgerBalance::query()->where('ledger_account_id', ($this->creditAccount)()->id)->sole()
-                ->confirmed()->toDisplayString())->toBe('581000.00');
+                ->confirmed()->toDisplayString())->toBe('-581000.00');
     });
 
     // Anything already referring to the draft still refers to the same thing.
@@ -218,6 +217,6 @@ describe('integrity', function (): void {
         $this->artisan('ledger:verify --transactions')->assertExitCode(0);
 
         expect(LedgerBalance::query()->where('ledger_account_id', ($this->creditAccount)()->id)->sole()
-            ->confirmed()->toDisplayString())->toBe('1000.00');
+            ->confirmed()->toDisplayString())->toBe('-1000.00');
     });
 });

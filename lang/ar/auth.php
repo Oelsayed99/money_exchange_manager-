@@ -8,6 +8,8 @@ return [
     'throttle' => 'محاولات دخول كثيرة. من فضلك حاول مرة أخرى بعد :seconds ثانية.',
 
     'form' => [
+        'business_name' => 'اسم النشاط',
+        'business_name_placeholder' => 'مكتب الصرافة',
         'name' => 'الاسم',
         'name_placeholder' => 'الاسم بالكامل',
         'email' => 'البريد الإلكتروني',
@@ -68,4 +70,14 @@ return [
         'resend' => 'إعادة إرسال رابط التفعيل',
         'log_out' => 'تسجيل الخروج',
     ],
+
+    'social_failed' => 'تعذّر إتمام تسجيل الدخول. حاول مرة أخرى، أو استخدم بريدك وكلمة المرور.',
+    'social_unavailable' => 'طريقة تسجيل الدخول هذه غير متاحة هنا.',
+    'providers' => [
+        'google' => 'المتابعة عبر Google',
+        'apple' => 'المتابعة عبر Apple',
+    ],
+
+    // The rule between the provider buttons and the form.
+    'or' => 'أو',
 ];

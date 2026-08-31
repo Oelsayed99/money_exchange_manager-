@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Ledger;
 
 use App\Domain\Money\Money;
+use App\Domain\Tenancy\ScopedQuery;
 use App\Enums\EntryDirection;
 use App\Enums\TransactionStatus;
 use App\Models\LedgerAccount;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Computes balances from ledger entries alone, ignoring the cache entirely.
@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class BalanceProjector
 {
+    public function __construct(private readonly ScopedQuery $scoped) {}
+
     /**
      * @return array{confirmed: string, pending_decrease: string}
      */
@@ -32,7 +34,7 @@ final class BalanceProjector
 
         // Chunked rather than loaded whole: an account with years of history should not
         // need to fit in memory to be verified.
-        DB::table('ledger_entries')
+        $this->scoped->table('ledger_entries')
             ->join('transactions', 'transactions.id', '=', 'ledger_entries.transaction_id')
             ->where('ledger_entries.ledger_account_id', $account->getKey())
             ->select(['ledger_entries.direction', 'ledger_entries.amount', 'transactions.status'])

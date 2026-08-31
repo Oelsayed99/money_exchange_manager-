@@ -22,28 +22,12 @@ function validCurrency(array $overrides = []): array
 }
 
 describe('role definitions', function (): void {
-    it('grants an administrator every permission', function (): void {
-        $user = userWithRole(Role::Administrator);
+    it('grants the owner every permission', function (): void {
+        $user = userWithRole(Role::Owner);
 
         foreach (Permission::cases() as $permission) {
             expect($user->can($permission->value))->toBeTrue();
         }
-    });
-
-    // Currencies define what every stored amount means. An operator reads them and
-    // cannot change them.
-    it('lets an operator read currencies but not change them', function (): void {
-        $user = userWithRole(Role::Operator);
-
-        expect($user->can(Permission::ViewCurrencies->value))->toBeTrue()
-            ->and($user->can(Permission::ManageCurrencies->value))->toBeFalse();
-    });
-
-    it('gives a viewer read access only', function (): void {
-        $user = userWithRole(Role::Viewer);
-
-        expect($user->can(Permission::ViewCurrencies->value))->toBeTrue()
-            ->and($user->can(Permission::ManageCurrencies->value))->toBeFalse();
     });
 
     it('gives a user with no role nothing at all', function (): void {
@@ -58,7 +42,7 @@ describe('role definitions', function (): void {
     // Gate::before bypass, so the permission table is the answer to "what can an
     // administrator do" — and re-seeding picks up newly added permissions.
     it('keeps the administrator in step with the Permission enum', function (): void {
-        $user = userWithRole(Role::Administrator);
+        $user = userWithRole(Role::Owner);
 
         expect($user->getAllPermissions()->pluck('name')->sort()->values()->all())
             ->toBe(collect(Permission::values())->sort()->values()->all());
@@ -66,8 +50,8 @@ describe('role definitions', function (): void {
 });
 
 describe('reading currencies', function (): void {
-    it('allows a viewer to see the list', function (): void {
-        $this->actingAs(userWithRole(Role::Viewer))->get('/currencies')->assertOk();
+    it('allows somebody holding no role to see the list', function (): void {
+        $this->actingAs(userWithoutRole())->get('/currencies')->assertForbidden();
     });
 
     it('forbids a user without permission', function (): void {
@@ -76,51 +60,39 @@ describe('reading currencies', function (): void {
 });
 
 describe('managing currencies', function (): void {
-    it('forbids a viewer from opening the create form', function (): void {
-        $this->actingAs(userWithRole(Role::Viewer))->get('/currencies/create')->assertForbidden();
-    });
-
-    it('forbids an operator from opening the create form', function (): void {
-        $this->actingAs(userWithRole(Role::Operator))->get('/currencies/create')->assertForbidden();
+    it('forbids somebody holding no role from opening the create form', function (): void {
+        $this->actingAs(userWithoutRole())->get('/currencies/create')->assertForbidden();
     });
 
     // The important case: not merely a hidden button, but a rejected request.
-    it('forbids a viewer from creating a currency directly', function (): void {
-        $this->actingAs(userWithRole(Role::Viewer))
+    it('forbids somebody holding no role from creating a currency directly', function (): void {
+        $this->actingAs(userWithoutRole())
             ->post('/currencies', validCurrency())
             ->assertForbidden();
 
         expect(Currency::query()->count())->toBe(0);
     });
 
-    it('forbids an operator from creating a currency directly', function (): void {
-        $this->actingAs(userWithRole(Role::Operator))
-            ->post('/currencies', validCurrency())
-            ->assertForbidden();
-
-        expect(Currency::query()->count())->toBe(0);
-    });
-
-    it('forbids a viewer from editing a currency', function (): void {
+    it('forbids somebody holding no role from editing a currency', function (): void {
         $currency = Currency::factory()->create(['code' => 'AED', 'decimal_places' => 2]);
 
-        $this->actingAs(userWithRole(Role::Viewer))
+        $this->actingAs(userWithoutRole())
             ->get("/currencies/{$currency->id}/edit")
             ->assertForbidden();
     });
 
-    it('forbids a viewer from updating a currency directly', function (): void {
+    it('forbids somebody holding no role from updating a currency directly', function (): void {
         $currency = Currency::factory()->create(['code' => 'AED', 'decimal_places' => 2]);
 
-        $this->actingAs(userWithRole(Role::Viewer))
+        $this->actingAs(userWithoutRole())
             ->put("/currencies/{$currency->id}", validCurrency(['code' => 'AED', 'decimal_places' => 8]))
             ->assertForbidden();
 
         expect($currency->fresh()?->decimal_places)->toBe(2);
     });
 
-    it('allows an administrator to create and update', function (): void {
-        $admin = userWithRole(Role::Administrator);
+    it('allows the owner to create and update', function (): void {
+        $admin = userWithRole(Role::Owner);
 
         $this->actingAs($admin)->post('/currencies', validCurrency())->assertRedirect('/currencies');
 
@@ -136,7 +108,7 @@ describe('managing currencies', function (): void {
     // Authorization runs in the form request, before validation, so an unauthorized
     // caller learns nothing about what the form expects.
     it('refuses an unauthorized request before validating it', function (): void {
-        $this->actingAs(userWithRole(Role::Viewer))
+        $this->actingAs(userWithoutRole())
             ->post('/currencies', [])
             ->assertForbidden()
             ->assertSessionHasNoErrors();
@@ -147,22 +119,21 @@ describe('shared permissions', function (): void {
     // Derived from the role rather than a hardcoded list: the property under test is
     // "exactly what this role grants, and nothing more", which must keep holding as
     // permissions are added.
-    it('sends only the permissions the user holds', function (): void {
-        $props = $this->actingAs(userWithRole(Role::Operator))
+    it('sends exactly what the role grants, derived rather than listed', function (): void {
+        $props = $this->actingAs(userWithRole(Role::Owner))
             ->get('/dashboard')
             ->viewData('page')['props'];
 
         $granted = array_map(
             static fn (Permission $permission): string => $permission->value,
-            Role::Operator->permissions(),
+            Role::Owner->permissions(),
         );
 
-        expect($props['auth']['permissions'])->toBe($granted)
-            ->and($props['auth']['permissions'])->not->toContain(Permission::ManageCurrencies->value);
+        expect($props['auth']['permissions'])->toBe($granted);
     });
 
-    it('sends an administrator every permission', function (): void {
-        $props = $this->actingAs(userWithRole(Role::Administrator))
+    it('sends the owner every permission', function (): void {
+        $props = $this->actingAs(userWithRole(Role::Owner))
             ->get('/dashboard')
             ->viewData('page')['props'];
 
@@ -183,10 +154,10 @@ describe('deletion', function (): void {
     // Currencies are referenced by ledger history that must stay reproducible
     // (Section 7). The policy denies deletion for everyone, including administrators,
     // so that adding a route later fails closed rather than open.
-    it('denies deletion to everyone, administrators included', function (): void {
+    it('denies deletion to everyone, the owner included', function (): void {
         $currency = Currency::factory()->create();
 
-        expect(userWithRole(Role::Administrator)->can('delete', $currency))->toBeFalse()
-            ->and(userWithRole(Role::Operator)->can('delete', $currency))->toBeFalse();
+        expect(userWithRole(Role::Owner)->can('delete', $currency))->toBeFalse()
+            ->and(userWithoutRole()->can('delete', $currency))->toBeFalse();
     });
 });

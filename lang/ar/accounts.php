@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    // The one account a new business starts with, so the first movement has
+    // somewhere to go. Renameable like any other.
+    'first_safe' => 'الخزنة الرئيسية',
+
     'title' => 'الحسابات',
     'description' => 'أماكن حفظ الأموال: البنوك، الخزائن، المحافظ، العُهد وحسابات الأمانة.',
     'create_title' => 'إضافة حساب',

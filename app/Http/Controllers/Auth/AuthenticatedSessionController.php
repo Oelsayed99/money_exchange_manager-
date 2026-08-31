@@ -21,6 +21,9 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
+            // Only the providers holding credentials, so a button never leads to an
+            // error page. Apple appears here the day its keys are in the environment.
+            'providers' => SocialAuthController::available(),
         ]);
     }
 
