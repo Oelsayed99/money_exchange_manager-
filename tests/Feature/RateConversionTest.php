@@ -85,6 +85,27 @@ describe('solving for the amount you owe', function (): void {
             ->assertJsonPath('exact', true);
     });
 
+    /*
+     * The movement form leans on exactly this call.
+     *
+     * "A client has 1,000,000 EGP with us and wants it in euros." The euros are what
+     * the operator does not know, so the form sends the pounds and the rate and puts
+     * the answer in the "Actually moved" field. Named here so that changing the shape
+     * of this endpoint fails a test that says who it would break.
+     */
+    it('works out what actually moved from the amount being recorded', function (): void {
+        solve([
+            'base_currency_id' => $this->usd->id,
+            'quote_currency_id' => $this->egp->id,
+            'rate' => '50.85',
+            'quote_amount' => '508500',
+        ])
+            ->assertOk()
+            ->assertJsonPath('solved_for', 'base_amount')
+            ->assertJsonPath('base_amount.amount', '10000.00')
+            ->assertJsonPath('exact', true);
+    });
+
     // "Someone wants to buy EGP from me and pay in EUR at 54.20." A million pounds does
     // not divide into euros evenly, and the operator has to be told before quoting it.
     it('says when the figure had to be cut', function (): void {
