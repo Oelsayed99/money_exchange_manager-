@@ -98,7 +98,7 @@ final class ExchangeRequest extends FormRequest
             }
 
             $this->checkTheLegsAreRealAmounts($validator);
-            $this->checkTheMethodHasWhatItNeeds($validator);
+            $this->checkTheMarginFiguresMakeSense($validator);
         });
     }
 
@@ -147,15 +147,20 @@ final class ExchangeRequest extends FormRequest
     }
 
     /**
-     * A margin method with nothing to work from.
+     * The margin figures, when they are given at all.
      *
-     * Both of these fields are optional in the rules above, because which of them is
-     * needed depends on the method chosen — and the enum already knows. Left unasked,
-     * a rate-difference deal with an empty cost rate passed validation and threw a
-     * DomainException out of the calculator: a stack trace where a field error belongs,
-     * on the screen where the day's money is recorded.
+     * Neither is required. The owner records deals where the margin is not the point —
+     * a transfer at cost, an accommodation for a regular — and being made to invent a
+     * cost rate to get past the form would put a wrong number in the books, which is
+     * worse than no number.
+     *
+     * A blank one means no margin on this deal: {@see marginMethod()} turns the method
+     * into None rather than handing the calculator a method it cannot work. What is
+     * still refused is a figure that is *present and nonsense* — zero or negative. A
+     * cost rate of zero is not a cheap deal, it is a mistyped one, and the margin worked
+     * out from it would be the whole of what the customer paid.
      */
-    private function checkTheMethodHasWhatItNeeds(Validator $validator): void
+    private function checkTheMarginFiguresMakeSense(Validator $validator): void
     {
         $method = ProfitMethod::tryFrom((string) $this->input('profit_method'));
 
@@ -164,28 +169,20 @@ final class ExchangeRequest extends FormRequest
         }
 
         if ($method->needsCostRate()) {
-            $this->requirePositive($validator, 'cost_rate', __('transactions.exchange.cost_rate'));
+            $this->refuseNonsense($validator, 'cost_rate', __('transactions.exchange.cost_rate'));
         }
 
         if ($method->needsValue()) {
-            $this->requirePositive($validator, 'profit_value', $method->valueLabel());
+            $this->refuseNonsense($validator, 'profit_value', $method->valueLabel());
         }
     }
 
-    /**
-     * Present, and greater than zero.
-     *
-     * Zero is refused as well as absent. A cost rate of nothing is not a cheap deal,
-     * it is a missing figure, and the margin worked out from it would be the whole of
-     * what the customer paid.
-     */
-    private function requirePositive(Validator $validator, string $field, string $label): void
+    /** Absent is allowed. Present and not greater than zero is not. */
+    private function refuseNonsense(Validator $validator, string $field, string $label): void
     {
         $value = $this->input($field);
 
         if ($value === null || $value === '') {
-            $validator->errors()->add($field, __('validation.required', ['attribute' => $label]));
-
             return;
         }
 
@@ -193,6 +190,28 @@ final class ExchangeRequest extends FormRequest
         if (is_string($value) && Decimal::isValid($value) && bccomp($value, '0', Decimal::WORKING_SCALE) <= 0) {
             $validator->errors()->add($field, __('transactions.exchange.must_be_positive', ['attribute' => $label]));
         }
+    }
+
+    /**
+     * The method this deal is actually recorded under.
+     *
+     * A method whose figure was left blank becomes None: the exchange is recorded, both
+     * legs post exactly as they would have, and no margin is claimed. The calculator's
+     * own rule — that a rate difference needs a cost rate — stays as strict as it was,
+     * because it is right; this is the interface deciding that a blank field means "no
+     * margin" rather than "guess one".
+     *
+     * The preview says so before anything is recorded, so a margin is never dropped
+     * quietly. See the profit card on the exchange screen.
+     */
+    private function marginMethod(): ProfitMethod
+    {
+        $method = ProfitMethod::from((string) $this->validated('profit_method'));
+
+        $missing = ($method->needsCostRate() && $this->validated('cost_rate') === null)
+            || ($method->needsValue() && $this->validated('profit_value') === null);
+
+        return $missing ? ProfitMethod::None : $method;
     }
 
     protected function prepareForValidation(): void
@@ -239,7 +258,7 @@ final class ExchangeRequest extends FormRequest
             deliveredAmount: $delivered->money((string) $this->validated('delivered_amount')),
             deliveredFrom: Account::query()->findOrFail((int) $this->validated('delivered_from_id')),
             occurredAt: new \DateTimeImmutable((string) $this->validated('occurred_at')),
-            profitMethod: ProfitMethod::from((string) $this->validated('profit_method')),
+            profitMethod: $this->marginMethod(),
             // Absent means the received leg, which is what every deal recorded before
             // the basis existed meant. See MarginBasis.
             marginBasis: $basis,

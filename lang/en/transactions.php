@@ -53,6 +53,7 @@ return [
     ],
 
     'preview' => [
+        'no_margin' => 'No margin will be recorded on this deal. The exchange itself is recorded in full — fill in the figure above if it should carry a margin.',
         'title' => 'Calculation',
         'customer_rate' => 'Customer rate',
         'cost_rate' => 'Cost rate',

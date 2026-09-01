@@ -331,6 +331,12 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: t('nav.exchange'), href: '/exchange' }];
 
+    // The method wants a figure and none has been typed. The deal will still record —
+    // both legs post exactly as they would have — but with no margin claimed.
+    const noMarginWillBeRecorded =
+        (selectedMethod?.needsCostRate === true && data.cost_rate.trim() === '') ||
+        (selectedMethod?.needsValue === true && data.profit_value.trim() === '');
+
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
         post('/exchange');
@@ -680,6 +686,15 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                         margin is visible while the amounts are being typed. */}
                     <aside className="h-fit space-y-3 lg:sticky lg:top-4">
                         <h2 className="text-sm font-medium">{t('transactions.preview.title')}</h2>
+
+                        {/* A method chosen but its figure left blank records the deal
+                            with no margin at all. Said here rather than discovered
+                            later in a report: a margin dropped quietly is money. */}
+                        {noMarginWillBeRecorded && (
+                            <p className="rounded-xl border border-amber-600/40 bg-amber-600/10 p-4 text-sm text-amber-800 dark:text-amber-300">
+                                {t('transactions.preview.no_margin')}
+                            </p>
+                        )}
 
                         {breakdown === null ? (
                             <p className="border-sidebar-border/70 dark:border-sidebar-border text-muted-foreground rounded-xl border p-4 text-sm">
