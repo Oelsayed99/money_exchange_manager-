@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 return [
     'exchange' => [
+        'cannot_be_negative' => 'لا يمكن أن يكون :attribute سالبًا.',
+        'must_be_positive' => 'يجب أن يكون :attribute أكبر من صفر.',
         'title' => 'صرف عملة',
         'description' => 'سجّل المبلغ المستلم والمبلغ المسلَّم كطرفين، مع السعر وهامش الربح.',
         'received' => 'المستلم',

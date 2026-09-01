@@ -54,6 +54,93 @@ function dealPayload(array $overrides = []): array
     ];
 }
 
+/*
+ * A margin method with nothing to work from.
+ *
+ * cost_rate and profit_value are optional in the rules, because which one is needed
+ * depends on the method — and nothing was asking the method. Choosing "rate difference"
+ * and leaving the cost rate empty passed validation and threw a DomainException out of
+ * the calculator: a stack trace on the screen where the day's money is recorded.
+ */
+describe('the margin method has to have what it needs', function (): void {
+    it('refuses a rate-difference deal with no cost rate', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['cost_rate' => null]))
+            ->assertSessionHasErrors('cost_rate');
+
+        expect(Transaction::query()->count())->toBe(0);
+    });
+
+    it('refuses a cost rate of zero, which is a missing figure and not a cheap deal', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['cost_rate' => '0']))
+            ->assertSessionHasErrors('cost_rate');
+    });
+
+    it('refuses each stated method with no figure beside it', function (string $method): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([
+                'profit_method' => $method,
+                'cost_rate' => null,
+                'profit_value' => null,
+            ]))
+            ->assertSessionHasErrors('profit_value');
+    })->with(['per_unit', 'percentage', 'fixed_amount', 'manual']);
+
+    it('asks for nothing when there is no margin to work out', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([
+                'profit_method' => 'none',
+                'cost_rate' => null,
+                'profit_value' => null,
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+    });
+
+    // The third way the calculator could be reached with nothing to work from: a leg
+    // of zero has no rate, so it throws there too.
+    it('refuses a leg of nothing', function (string $field): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([$field => '0']))
+            ->assertSessionHasErrors($field);
+
+        expect(Transaction::query()->count())->toBe(0);
+    })->with(['received_amount', 'delivered_amount']);
+
+    it('refuses a negative leg, which is the same deal the other way round', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['received_amount' => '-2574000']))
+            ->assertSessionHasErrors('received_amount');
+    });
+
+    it('refuses a negative fee, expense or commission', function (string $field): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([$field => '-100']))
+            ->assertSessionHasErrors($field);
+    })->with(['fees_charged', 'expenses', 'commissions']);
+
+    // Every message names the field the way the screen does. Deriving the label from
+    // the field name printed "transactions.exchange.fees_charged" at somebody.
+    it('names the field the way the screen does', function (): void {
+        $errors = $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['fees_charged' => '-100']))
+            ->assertSessionHasErrors('fees_charged')
+            ->getSession()->get('errors');
+
+        expect($errors->first('fees_charged'))->toBe('Fees charged cannot be negative.');
+    });
+
+    // The preview shares the request, so it had the same hole — and it is the one an
+    // operator hits first, while they are still typing.
+    it('answers the preview with a field error rather than failing', function (): void {
+        $this->actingAs($this->operator)
+            ->postJson('/exchange/preview', dealPayload(['cost_rate' => null]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('cost_rate');
+    });
+});
+
 describe('authorization', function (): void {
     it('requires authentication', function (): void {
         $this->get('/exchange')->assertRedirect('/login');

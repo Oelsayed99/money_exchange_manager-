@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 return [
     'exchange' => [
+        'cannot_be_negative' => ':attribute cannot be negative.',
+        'must_be_positive' => ':attribute has to be greater than zero.',
         'title' => 'Currency exchange',
         'description' => 'Record money received and money delivered as two legs, with the rate and the margin.',
         'received' => 'Received',

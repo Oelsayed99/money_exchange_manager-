@@ -96,7 +96,103 @@ final class ExchangeRequest extends FormRequest
                     ]));
                 }
             }
+
+            $this->checkTheLegsAreRealAmounts($validator);
+            $this->checkTheMethodHasWhatItNeeds($validator);
         });
+    }
+
+    /**
+     * Both legs, and what is taken off the deal.
+     *
+     * A leg of zero has no rate — the calculator divides by it — and a negative leg is
+     * the same deal the other way round under a name that hides it. Neither was
+     * refused, and a zero reached the calculator as a DomainException.
+     *
+     * Fees, expenses and commissions are allowed to be zero, because a deal with no fee
+     * is ordinary. Negative is not: a negative fee is a fee going the other way, which
+     * is a different thing to record.
+     */
+    private function checkTheLegsAreRealAmounts(Validator $validator): void
+    {
+        // Field, the label the operator sees, and whether zero is allowed. The label is
+        // mapped rather than derived: `fees_charged` is called `fees` on the screen, and
+        // deriving it would print a raw translation key at somebody.
+        $fields = [
+            ['received_amount', 'received', false],
+            ['delivered_amount', 'delivered', false],
+            ['fees_charged', 'fees', true],
+            ['expenses', 'expenses', true],
+            ['commissions', 'commissions', true],
+        ];
+
+        foreach ($fields as [$field, $label, $zeroAllowed]) {
+            $value = $this->input($field);
+
+            if (! is_string($value) || ! Decimal::isValid($value)) {
+                continue;
+            }
+
+            $comparison = bccomp($value, '0', Decimal::WORKING_SCALE);
+            $attribute = __('transactions.exchange.'.$label);
+
+            if (! $zeroAllowed && $comparison <= 0) {
+                $validator->errors()->add($field, __('transactions.exchange.must_be_positive', ['attribute' => $attribute]));
+            }
+
+            if ($zeroAllowed && $comparison < 0) {
+                $validator->errors()->add($field, __('transactions.exchange.cannot_be_negative', ['attribute' => $attribute]));
+            }
+        }
+    }
+
+    /**
+     * A margin method with nothing to work from.
+     *
+     * Both of these fields are optional in the rules above, because which of them is
+     * needed depends on the method chosen — and the enum already knows. Left unasked,
+     * a rate-difference deal with an empty cost rate passed validation and threw a
+     * DomainException out of the calculator: a stack trace where a field error belongs,
+     * on the screen where the day's money is recorded.
+     */
+    private function checkTheMethodHasWhatItNeeds(Validator $validator): void
+    {
+        $method = ProfitMethod::tryFrom((string) $this->input('profit_method'));
+
+        if (! $method instanceof ProfitMethod) {
+            return;
+        }
+
+        if ($method->needsCostRate()) {
+            $this->requirePositive($validator, 'cost_rate', __('transactions.exchange.cost_rate'));
+        }
+
+        if ($method->needsValue()) {
+            $this->requirePositive($validator, 'profit_value', $method->valueLabel());
+        }
+    }
+
+    /**
+     * Present, and greater than zero.
+     *
+     * Zero is refused as well as absent. A cost rate of nothing is not a cheap deal,
+     * it is a missing figure, and the margin worked out from it would be the whole of
+     * what the customer paid.
+     */
+    private function requirePositive(Validator $validator, string $field, string $label): void
+    {
+        $value = $this->input($field);
+
+        if ($value === null || $value === '') {
+            $validator->errors()->add($field, __('validation.required', ['attribute' => $label]));
+
+            return;
+        }
+
+        // Anything that is not a decimal has already been reported above.
+        if (is_string($value) && Decimal::isValid($value) && bccomp($value, '0', Decimal::WORKING_SCALE) <= 0) {
+            $validator->errors()->add($field, __('transactions.exchange.must_be_positive', ['attribute' => $label]));
+        }
     }
 
     protected function prepareForValidation(): void
