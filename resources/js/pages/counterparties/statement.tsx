@@ -90,8 +90,12 @@ export default function CounterpartyStatement({ counterparty, currencies, statem
                         </p>
                     </div>
 
+                    {/* The action row wraps, because three buttons of prose do not fit a
+                        phone. It was 414px wide on a 375px screen and was the whole of
+                        why this page scrolled sideways — the table was already scrolling
+                        inside its own box quite happily. */}
                     {statement && (
-                        <div className="flex gap-2 print:hidden">
+                        <div className="flex flex-wrap gap-2 print:hidden">
                             <Button type="button" variant="outline" onClick={() => window.print()}>
                                 <Printer className="size-4" aria-hidden="true" />
                                 {t('statements.print')}
