@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
+import { postJson } from '@/lib/post-json';
 import type { BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { AlertTriangle, ArrowDownRight, ArrowLeftRight, LoaderCircle, TrendingDown, TrendingUp } from 'lucide-react';
@@ -330,6 +331,12 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
     };
 
     const breadcrumbs: BreadcrumbItem[] = [{ title: t('nav.exchange'), href: '/exchange' }];
+
+    // The method wants a figure and none has been typed. The deal will still record —
+    // both legs post exactly as they would have — but with no margin claimed.
+    const noMarginWillBeRecorded =
+        (selectedMethod?.needsCostRate === true && data.cost_rate.trim() === '') ||
+        (selectedMethod?.needsValue === true && data.profit_value.trim() === '');
 
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
@@ -681,6 +688,15 @@ export default function ExchangeCreate({ currencies, accounts, counterparties, p
                     <aside className="h-fit space-y-3 lg:sticky lg:top-4">
                         <h2 className="text-sm font-medium">{t('transactions.preview.title')}</h2>
 
+                        {/* A method chosen but its figure left blank records the deal
+                            with no margin at all. Said here rather than discovered
+                            later in a report: a margin dropped quietly is money. */}
+                        {noMarginWillBeRecorded && (
+                            <p className="rounded-xl border border-amber-600/40 bg-amber-600/10 p-4 text-sm text-amber-800 dark:text-amber-300">
+                                {t('transactions.preview.no_margin')}
+                            </p>
+                        )}
+
                         {breakdown === null ? (
                             <p className="border-sidebar-border/70 dark:border-sidebar-border text-muted-foreground rounded-xl border p-4 text-sm">
                                 {t('transactions.preview.awaiting')}
@@ -843,25 +859,6 @@ function Leg({
     );
 }
 
-/**
- * POST JSON with the CSRF token, returning null on anything but a success.
- *
- * A failed conversion leaves the previous figures alone rather than blanking them:
- * mid-typing states produce validation failures constantly, and clearing the form on
- * each one would be unusable.
- */
-function postJson<T>(url: string, body: unknown, signal: AbortSignal): Promise<T | null> {
-    return fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'X-XSRF-TOKEN': decodeURIComponent((document.cookie.match(/XSRF-TOKEN=([^;]+)/) ?? [])[1] ?? ''),
-        },
-        body: JSON.stringify(body),
-        signal,
-    }).then((response) => (response.ok ? (response.json() as Promise<T>) : null));
-}
 
 /**
  * Tidy a rate for display without touching its value.

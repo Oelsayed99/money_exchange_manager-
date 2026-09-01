@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
 import { useTranslations } from '@/lib/i18n';
+import { postJson } from '@/lib/post-json';
 import { cn } from '@/lib/utils';
 import type { BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -15,6 +16,13 @@ import { AlertTriangle, LoaderCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type MoneyPayload = { amount: string; currency: string };
+
+/** What /exchange/convert answers with. `exact` is false when the division was cut. */
+interface Converted {
+    base_amount: MoneyPayload;
+    quote_amount: MoneyPayload;
+    exact: boolean;
+}
 
 interface TypeOption {
     value: string;
@@ -87,16 +95,67 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
     const cashCode = currencies.find((c) => String(c.id) === data.cash_currency_id)?.code ?? '';
 
     /*
-        What the client's side comes to, shown while it is being typed.
+        The two amounts and the rate, with the third worked out from the other two.
 
-        Only ever a preview. The figure that reaches the ledger is the one in the amount
-        field above — this multiplies to help the operator fill it in, and Section 16
-        keeps the arithmetic that matters on the server.
+        This used to multiply in JavaScript and print the answer as a hint, leaving the
+        operator to type it in themselves. Two problems with that. It was float
+        arithmetic on money, which Section 16 exists to prevent — and it was the wrong
+        way round for half the job: recording a client's 1,000,000 EGP as euros means
+        knowing the euros, and nothing worked them out.
+
+        So it goes to the server, to the same exact converter the exchange screen uses,
+        and the answer lands in the field. Whichever amount the operator is not editing
+        is the one that gets computed, so it works in both directions: type the dollars
+        and get the pounds, or type the pounds and get the dollars.
     */
-    const converted =
-        data.cash_currency_id !== '' && data.cash_amount !== '' && data.rate !== '' && Number(data.rate) !== 0
-            ? (Number(data.cash_amount) * Number(data.rate)).toFixed(2)
-            : null;
+    const [lastEdited, setLastEdited] = useState<'amount' | 'cash_amount' | null>(null);
+    const [computed, setComputed] = useState<{ field: 'amount' | 'cash_amount'; exact: boolean } | null>(null);
+
+    const converting = selected?.mayConvert === true && data.cash_currency_id !== '' && data.currency_id !== '';
+
+    useEffect(() => {
+        // The field the operator is in is the fact; the other one follows it. Without
+        // this the two would overwrite each other on every keystroke.
+        const solveFor = lastEdited === 'cash_amount' ? 'amount' : 'cash_amount';
+        const given = solveFor === 'cash_amount' ? data.amount : data.cash_amount;
+
+        if (!converting || data.rate === '' || given === '') {
+            setComputed(null);
+
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+            postJson<Converted>(
+                '/exchange/convert',
+                {
+                    // Base is the money that actually moved; quote is the currency the
+                    // movement is being recorded in. The rate reads quote per base,
+                    // which is how it is written on the form: 10,000 USD @ 50.85 = EGP.
+                    base_currency_id: data.cash_currency_id,
+                    quote_currency_id: data.currency_id,
+                    rate: data.rate,
+                    ...(solveFor === 'cash_amount' ? { quote_amount: data.amount } : { base_amount: data.cash_amount }),
+                },
+                controller.signal,
+            )
+                .then((result) => {
+                    if (result === null) {
+                        return;
+                    }
+
+                    setData(solveFor, solveFor === 'cash_amount' ? result.base_amount.amount : result.quote_amount.amount);
+                    setComputed({ field: solveFor, exact: result.exact });
+                })
+                .catch(() => undefined);
+        }, 300);
+
+        return () => {
+            controller.abort();
+            clearTimeout(timer);
+        };
+    }, [converting, data.rate, data.amount, data.cash_amount, data.cash_currency_id, data.currency_id, lastEdited, setData]);
 
     // Clearing the currency clears what depended on it, so a half-filled conversion
     // cannot be submitted by accident.
@@ -184,8 +243,21 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                         )}
 
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <Field label={t('movements.amount')} htmlFor="amount" error={errors.amount}>
-                                <MoneyInput id="amount" value={data.amount} onChange={(v) => setData('amount', v)} currency={currencyCode} />
+                            <Field
+                                label={t('movements.amount')}
+                                htmlFor="amount"
+                                error={errors.amount}
+                                note={computed?.field === 'amount' ? t('transactions.exchange.computed') : undefined}
+                            >
+                                <MoneyInput
+                                    id="amount"
+                                    value={data.amount}
+                                    onChange={(v) => {
+                                        setLastEdited('amount');
+                                        setData('amount', v);
+                                    }}
+                                    currency={currencyCode}
+                                />
                             </Field>
 
                             <Field label={t('movements.currency')} htmlFor="currency_id" error={errors.currency_id}>
@@ -216,11 +288,19 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                                 <div className="grid gap-3 rounded-lg border border-dashed p-3 sm:col-span-2 sm:grid-cols-3">
                                     <p className="text-muted-foreground text-xs sm:col-span-3">{t('movements.convert_hint')}</p>
 
-                                    <Field label={t('movements.cash_amount')} htmlFor="cash_amount" error={errors.cash_amount}>
+                                    <Field
+                                        label={t('movements.cash_amount')}
+                                        htmlFor="cash_amount"
+                                        error={errors.cash_amount}
+                                        note={computed?.field === 'cash_amount' ? t('transactions.exchange.computed') : undefined}
+                                    >
                                         <MoneyInput
                                             id="cash_amount"
                                             value={data.cash_amount}
-                                            onChange={(v) => setData('cash_amount', v)}
+                                            onChange={(v) => {
+                                                setLastEdited('cash_amount');
+                                                setData('cash_amount', v);
+                                            }}
                                             currency={cashCode}
                                         />
                                     </Field>
@@ -247,11 +327,23 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
                                         <MoneyInput id="rate" value={data.rate} onChange={(v) => setData('rate', v)} />
                                     </Field>
 
-                                    {/* The figure that will be recorded, worked out where
-                                        the operator can see it before they commit. */}
-                                    {converted !== null && (
+                                    {/* What the two amounts and the rate say, read back
+                                        as one line. A single LTR container, not three:
+                                        in Arabic, separate islands put the equals sign
+                                        in the wrong place. */}
+                                    {converting && data.cash_amount !== '' && data.amount !== '' && data.rate !== '' && (
                                         <p className="text-muted-foreground text-xs sm:col-span-3" dir="ltr">
-                                            {data.cash_amount} {cashCode} @ {data.rate} = {converted} {currencyCode}
+                                            {data.cash_amount} {cashCode} @ {data.rate} = {data.amount} {currencyCode}
+                                        </p>
+                                    )}
+
+                                    {/* Division does not always terminate. The figure is
+                                        cut rather than rounded, so it can never come out
+                                        above the true value — and the operator is told,
+                                        because the amount they settled at is the fact. */}
+                                    {computed !== null && ! computed.exact && (
+                                        <p className="text-xs text-amber-700 sm:col-span-3 dark:text-amber-400">
+                                            {t('transactions.exchange.inexact')}
                                         </p>
                                     )}
                                 </div>
@@ -389,12 +481,28 @@ export default function RecordMovement({ types, accounts, currencies, counterpar
     );
 }
 
-function Field({ label, htmlFor, error, children }: { label: string; htmlFor: string; error?: string; children: React.ReactNode }) {
+function Field({
+    label,
+    htmlFor,
+    error,
+    note,
+    children,
+}: {
+    label: string;
+    htmlFor: string;
+    error?: string;
+    /** Said beside the label rather than under the field: "worked out for you". */
+    note?: string;
+    children: React.ReactNode;
+}) {
     return (
         <div className="grid gap-1.5">
-            <Label htmlFor={htmlFor} className="text-xs">
-                {label}
-            </Label>
+            <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor={htmlFor} className="text-xs">
+                    {label}
+                </Label>
+                {note !== undefined && <span className="text-muted-foreground text-[11px]">{note}</span>}
+            </div>
             {children}
             <InputError message={error} />
         </div>

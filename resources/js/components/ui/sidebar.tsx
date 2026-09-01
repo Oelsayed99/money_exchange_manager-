@@ -281,7 +281,12 @@ const SidebarInset = React.forwardRef<HTMLDivElement, React.ComponentProps<'main
         <main
             ref={ref}
             className={cn(
-                'relative flex min-h-svh flex-1 flex-col bg-background',
+                // `min-w-0` is what keeps a wide table inside its own scroller. A flex
+                // item defaults to `min-width: auto`, which means it refuses to shrink
+                // below its content — so a table wider than the screen pushed this
+                // element out, and the whole page scrolled sideways instead of the
+                // table. Every list screen in the application depended on this one word.
+                'relative flex min-h-svh min-w-0 flex-1 flex-col bg-background',
                 // Logical margin, not physical: the gap sits against whichever edge the
                 // sidebar occupies, and in RTL both the sidebar and the inline start
                 // flip together.

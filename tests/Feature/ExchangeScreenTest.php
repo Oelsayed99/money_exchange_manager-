@@ -6,6 +6,7 @@ use App\Domain\Ledger\LedgerAccountResolver;
 use App\Domain\Money\CurrencyRegistry;
 use App\Enums\LedgerAccountSubkind;
 use App\Enums\Permission;
+use App\Enums\ProfitMethod;
 use App\Enums\ProfitStatus;
 use App\Enums\Role;
 use App\Models\Account;
@@ -53,6 +54,146 @@ function dealPayload(array $overrides = []): array
         ...$overrides,
     ];
 }
+
+/*
+ * A margin method with nothing to work from.
+ *
+ * cost_rate and profit_value are optional in the rules, because which one is needed
+ * depends on the method — and nothing was asking the method. Choosing "rate difference"
+ * and leaving the cost rate empty passed validation and threw a DomainException out of
+ * the calculator: a stack trace on the screen where the day's money is recorded.
+ */
+describe('a margin is optional, a nonsense one is not', function (): void {
+    /*
+     * The owner's instruction, in their words: the cost rate is not required.
+     *
+     * Plenty of deals are not about the margin — a transfer at cost, an accommodation
+     * for a regular — and being made to invent a rate to get past the form would put a
+     * wrong number in the books, which is worse than no number.
+     *
+     * So a blank figure records the deal with no margin rather than refusing it. The
+     * calculator's own rule stays exactly as strict; this is the interface deciding
+     * that blank means "none" instead of handing it a method it cannot work.
+     */
+    it('records a rate-difference deal with no cost rate, and claims no margin', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['cost_rate' => null]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $deal = Transaction::query()->sole();
+
+        // Zero rather than null: the deal did not earn a margin, which is a figure,
+        // not an absence of one.
+        expect($deal->profit_method)->toBe(ProfitMethod::None)
+            ->and($deal->net_profit)->toBe('0.0000000000');
+    });
+
+    it('records each stated method with no figure beside it the same way', function (string $method): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([
+                'profit_method' => $method,
+                'cost_rate' => null,
+                'profit_value' => null,
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        expect(Transaction::query()->sole()->profit_method)->toBe(ProfitMethod::None);
+    })->with(['per_unit', 'percentage', 'fixed_amount', 'manual']);
+
+    // Both legs still post in full. The margin is the only thing not claimed.
+    it('posts the exchange itself in full either way', function (): void {
+        $this->actingAs($this->operator)->post('/exchange', dealPayload(['cost_rate' => null]));
+
+        expect(Transaction::query()->sole()->legs)->toHaveCount(2);
+
+        $this->artisan('ledger:verify --transactions')->assertExitCode(0);
+    });
+
+    /*
+     * Absent is a choice. Zero is a typo.
+     *
+     * A cost rate of nothing is not a cheap deal — the margin worked out from it would
+     * be the whole of what the customer paid.
+     */
+    it('still refuses a cost rate that is present and not a rate', function (string $value): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['cost_rate' => $value]))
+            ->assertSessionHasErrors('cost_rate');
+
+        expect(Transaction::query()->count())->toBe(0);
+    })->with(['0', '-51.20']);
+
+    it('still refuses a stated figure that is present and not a figure', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([
+                'profit_method' => 'percentage',
+                'cost_rate' => null,
+                'profit_value' => '0',
+            ]))
+            ->assertSessionHasErrors('profit_value');
+    });
+
+    it('asks for nothing when there is no margin to work out', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([
+                'profit_method' => 'none',
+                'cost_rate' => null,
+                'profit_value' => null,
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+    });
+
+    // The third way the calculator could be reached with nothing to work from: a leg
+    // of zero has no rate, so it throws there too.
+    it('refuses a leg of nothing', function (string $field): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([$field => '0']))
+            ->assertSessionHasErrors($field);
+
+        expect(Transaction::query()->count())->toBe(0);
+    })->with(['received_amount', 'delivered_amount']);
+
+    it('refuses a negative leg, which is the same deal the other way round', function (): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['received_amount' => '-2574000']))
+            ->assertSessionHasErrors('received_amount');
+    });
+
+    it('refuses a negative fee, expense or commission', function (string $field): void {
+        $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload([$field => '-100']))
+            ->assertSessionHasErrors($field);
+    })->with(['fees_charged', 'expenses', 'commissions']);
+
+    // Every message names the field the way the screen does. Deriving the label from
+    // the field name printed "transactions.exchange.fees_charged" at somebody.
+    it('names the field the way the screen does', function (): void {
+        $errors = $this->actingAs($this->operator)
+            ->post('/exchange', dealPayload(['fees_charged' => '-100']))
+            ->assertSessionHasErrors('fees_charged')
+            ->getSession()->get('errors');
+
+        expect($errors->first('fees_charged'))->toBe('Fees charged cannot be negative.');
+    });
+
+    // The preview shares the request, so it answers the same way — and it is the one
+    // an operator meets first, while they are still typing.
+    it('previews a deal with no cost rate instead of failing', function (): void {
+        $this->actingAs($this->operator)
+            ->postJson('/exchange/preview', dealPayload(['cost_rate' => null]))
+            ->assertOk();
+    });
+
+    it('answers the preview with a field error when the figure is nonsense', function (): void {
+        $this->actingAs($this->operator)
+            ->postJson('/exchange/preview', dealPayload(['cost_rate' => '0']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('cost_rate');
+    });
+});
 
 describe('authorization', function (): void {
     it('requires authentication', function (): void {

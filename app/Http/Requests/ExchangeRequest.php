@@ -96,7 +96,122 @@ final class ExchangeRequest extends FormRequest
                     ]));
                 }
             }
+
+            $this->checkTheLegsAreRealAmounts($validator);
+            $this->checkTheMarginFiguresMakeSense($validator);
         });
+    }
+
+    /**
+     * Both legs, and what is taken off the deal.
+     *
+     * A leg of zero has no rate — the calculator divides by it — and a negative leg is
+     * the same deal the other way round under a name that hides it. Neither was
+     * refused, and a zero reached the calculator as a DomainException.
+     *
+     * Fees, expenses and commissions are allowed to be zero, because a deal with no fee
+     * is ordinary. Negative is not: a negative fee is a fee going the other way, which
+     * is a different thing to record.
+     */
+    private function checkTheLegsAreRealAmounts(Validator $validator): void
+    {
+        // Field, the label the operator sees, and whether zero is allowed. The label is
+        // mapped rather than derived: `fees_charged` is called `fees` on the screen, and
+        // deriving it would print a raw translation key at somebody.
+        $fields = [
+            ['received_amount', 'received', false],
+            ['delivered_amount', 'delivered', false],
+            ['fees_charged', 'fees', true],
+            ['expenses', 'expenses', true],
+            ['commissions', 'commissions', true],
+        ];
+
+        foreach ($fields as [$field, $label, $zeroAllowed]) {
+            $value = $this->input($field);
+
+            if (! is_string($value) || ! Decimal::isValid($value)) {
+                continue;
+            }
+
+            $comparison = bccomp($value, '0', Decimal::WORKING_SCALE);
+            $attribute = __('transactions.exchange.'.$label);
+
+            if (! $zeroAllowed && $comparison <= 0) {
+                $validator->errors()->add($field, __('transactions.exchange.must_be_positive', ['attribute' => $attribute]));
+            }
+
+            if ($zeroAllowed && $comparison < 0) {
+                $validator->errors()->add($field, __('transactions.exchange.cannot_be_negative', ['attribute' => $attribute]));
+            }
+        }
+    }
+
+    /**
+     * The margin figures, when they are given at all.
+     *
+     * Neither is required. The owner records deals where the margin is not the point —
+     * a transfer at cost, an accommodation for a regular — and being made to invent a
+     * cost rate to get past the form would put a wrong number in the books, which is
+     * worse than no number.
+     *
+     * A blank one means no margin on this deal: {@see marginMethod()} turns the method
+     * into None rather than handing the calculator a method it cannot work. What is
+     * still refused is a figure that is *present and nonsense* — zero or negative. A
+     * cost rate of zero is not a cheap deal, it is a mistyped one, and the margin worked
+     * out from it would be the whole of what the customer paid.
+     */
+    private function checkTheMarginFiguresMakeSense(Validator $validator): void
+    {
+        $method = ProfitMethod::tryFrom((string) $this->input('profit_method'));
+
+        if (! $method instanceof ProfitMethod) {
+            return;
+        }
+
+        if ($method->needsCostRate()) {
+            $this->refuseNonsense($validator, 'cost_rate', __('transactions.exchange.cost_rate'));
+        }
+
+        if ($method->needsValue()) {
+            $this->refuseNonsense($validator, 'profit_value', $method->valueLabel());
+        }
+    }
+
+    /** Absent is allowed. Present and not greater than zero is not. */
+    private function refuseNonsense(Validator $validator, string $field, string $label): void
+    {
+        $value = $this->input($field);
+
+        if ($value === null || $value === '') {
+            return;
+        }
+
+        // Anything that is not a decimal has already been reported above.
+        if (is_string($value) && Decimal::isValid($value) && bccomp($value, '0', Decimal::WORKING_SCALE) <= 0) {
+            $validator->errors()->add($field, __('transactions.exchange.must_be_positive', ['attribute' => $label]));
+        }
+    }
+
+    /**
+     * The method this deal is actually recorded under.
+     *
+     * A method whose figure was left blank becomes None: the exchange is recorded, both
+     * legs post exactly as they would have, and no margin is claimed. The calculator's
+     * own rule — that a rate difference needs a cost rate — stays as strict as it was,
+     * because it is right; this is the interface deciding that a blank field means "no
+     * margin" rather than "guess one".
+     *
+     * The preview says so before anything is recorded, so a margin is never dropped
+     * quietly. See the profit card on the exchange screen.
+     */
+    private function marginMethod(): ProfitMethod
+    {
+        $method = ProfitMethod::from((string) $this->validated('profit_method'));
+
+        $missing = ($method->needsCostRate() && $this->validated('cost_rate') === null)
+            || ($method->needsValue() && $this->validated('profit_value') === null);
+
+        return $missing ? ProfitMethod::None : $method;
     }
 
     protected function prepareForValidation(): void
@@ -143,7 +258,7 @@ final class ExchangeRequest extends FormRequest
             deliveredAmount: $delivered->money((string) $this->validated('delivered_amount')),
             deliveredFrom: Account::query()->findOrFail((int) $this->validated('delivered_from_id')),
             occurredAt: new \DateTimeImmutable((string) $this->validated('occurred_at')),
-            profitMethod: ProfitMethod::from((string) $this->validated('profit_method')),
+            profitMethod: $this->marginMethod(),
             // Absent means the received leg, which is what every deal recorded before
             // the basis existed meant. See MarginBasis.
             marginBasis: $basis,

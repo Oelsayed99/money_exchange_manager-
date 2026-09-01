@@ -26,7 +26,10 @@ export default function AppSidebarLayout({ children, breadcrumbs = [] }: { child
             <AppContent variant="sidebar">
                 <AppSidebarHeader breadcrumbs={breadcrumbs} />
                 {/* tabIndex allows the skip link to move focus here, not merely scroll. */}
-                <main id="main" tabIndex={-1}>
+                {/* min-w-0 for the same reason as SidebarInset: without it this grows
+                    to fit the widest table on the page rather than letting the table
+                    scroll inside itself. */}
+                <main id="main" tabIndex={-1} className="min-w-0 flex-1">
                     {children}
                 </main>
             </AppContent>

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 return [
     'exchange' => [
+        'cannot_be_negative' => 'لا يمكن أن يكون :attribute سالبًا.',
+        'must_be_positive' => 'يجب أن يكون :attribute أكبر من صفر.',
         'title' => 'صرف عملة',
         'description' => 'سجّل المبلغ المستلم والمبلغ المسلَّم كطرفين، مع السعر وهامش الربح.',
         'received' => 'المستلم',
@@ -50,6 +52,7 @@ return [
     ],
 
     'preview' => [
+        'no_margin' => 'لن يُسجَّل أي هامش على هذه الصفقة. الصرف نفسه يُسجَّل كاملًا — أدخل الرقم أعلاه إن كان لها هامش.',
         'title' => 'الحساب',
         'customer_rate' => 'سعر العميل',
         'cost_rate' => 'سعر التكلفة',
