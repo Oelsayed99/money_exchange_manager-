@@ -30,11 +30,20 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## What happens to what is already here
  *
- * Everything that exists becomes one founding business. Nothing is deleted and nothing
- * is guessed at — a row that exists today plainly belongs to the only business there
- * has ever been. The ledger has to be empty first for the same reason as ADR 0032: the
- * owner is re-seeding, and a migration that quietly reassigns posted money is a
- * migration nobody can check.
+ * Everything that exists becomes one founding business, ledger and all. That is not a
+ * guess and needs no permission: before this migration there is no such thing as a
+ * second business, so every row in the database provably belongs to the only one there
+ * has ever been.
+ *
+ * This first refused to run while `ledger_entries` had anything in it, by analogy with
+ * the migration in ADR 0032 — which was right *there*, because folding four positions
+ * into one meant deciding what each old movement had meant. Here there is nothing to
+ * decide. All the guard achieved was to make an existing office purge its books to come
+ * along, which is a real loss in exchange for nothing.
+ *
+ * Going back is the direction that can lose something, so that is where the guard is
+ * now: `down()` refuses once a second business exists, because dropping the column then
+ * would merge two offices' ledgers into one undifferentiated pile.
  */
 return new class extends Migration
 {
@@ -76,27 +85,39 @@ return new class extends Migration
 
     public function up(): void
     {
-        $this->refuseIfTheLedgerHasHistory();
+        // Every step below asks whether it has already been done.
+        //
+        // MySQL does not roll DDL back. A migration that fails partway through leaves
+        // half its columns in place and no record that it ran, and the only way out is
+        // to re-run it — which then dies on the first table it already created. Written
+        // this way, re-running finishes the job.
+        if (! Schema::hasTable('businesses')) {
+            Schema::create('businesses', function (Blueprint $table): void {
+                $table->id();
+                $table->string('name');
 
-        Schema::create('businesses', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name');
+                // The person who signed up. Nullable only so the founding business below
+                // can be created before anybody is attached to it.
+                $table->foreignId('owner_id')->nullable()->constrained('users')->nullOnDelete();
 
-            // The person who signed up. Nullable only so the founding business below
-            // can be created before anybody is attached to it.
-            $table->foreignId('owner_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->string('locale', 5)->default('en');
+                $table->timestamps();
+                $table->softDeletes();
+            });
+        }
 
-            $table->string('locale', 5)->default('en');
-            $table->timestamps();
-            $table->softDeletes();
-        });
-
-        Schema::table('users', function (Blueprint $table): void {
-            $table->foreignId('business_id')->nullable()->after('id')
-                ->constrained('businesses')->cascadeOnDelete();
-        });
+        if (! Schema::hasColumn('users', 'business_id')) {
+            Schema::table('users', function (Blueprint $table): void {
+                $table->foreignId('business_id')->nullable()->after('id')
+                    ->constrained('businesses')->cascadeOnDelete();
+            });
+        }
 
         foreach (self::SCOPED as $table) {
+            if (Schema::hasColumn($table, 'business_id')) {
+                continue;
+            }
+
             Schema::table($table, function (Blueprint $blueprint) use ($table): void {
                 // Nullable for now; filled below and tightened at the end, because a
                 // NOT NULL column cannot be added to a table that already has rows.
@@ -121,19 +142,64 @@ return new class extends Migration
         }
 
         foreach (self::UNIQUES as $table => [$name, $columns]) {
-            Schema::table($table, function (Blueprint $blueprint) use ($name, $columns): void {
-                $blueprint->unique(['business_id', ...$columns], $name.'_per_business');
-            });
+            if (! $this->indexExists($table, $name.'_per_business')) {
+                Schema::table($table, function (Blueprint $blueprint) use ($name, $columns): void {
+                    $blueprint->unique(['business_id', ...$columns], $name.'_per_business');
+                });
+            }
 
-            Schema::table($table, function (Blueprint $blueprint) use ($name): void {
-                $blueprint->dropUnique($name);
-            });
+            if ($this->indexExists($table, $name)) {
+                Schema::table($table, function (Blueprint $blueprint) use ($name): void {
+                    $blueprint->dropUnique($name);
+                });
+            }
+        }
+    }
+
+    private function indexExists(string $table, string $index): bool
+    {
+        return DB::table('information_schema.STATISTICS')
+            ->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', $table)
+            ->where('INDEX_NAME', $index)
+            ->exists();
+    }
+
+    /**
+     * Run something with the append-only triggers temporarily removed.
+     *
+     * Read back from the database rather than written out here, so this cannot drift
+     * from whatever the triggers actually are. Restored in a `finally`, so there is no
+     * path — including an exception mid-backfill — that leaves the ledger editable.
+     */
+    private function withAppendOnlyGuardsOff(Closure $work): void
+    {
+        $triggers = [];
+
+        foreach (DB::select('SHOW TRIGGERS') as $row) {
+            $name = (string) $row->Trigger;
+            $definition = DB::select("SHOW CREATE TRIGGER `{$name}`")[0];
+
+            $triggers[$name] = (string) $definition->{'SQL Original Statement'};
+        }
+
+        foreach (array_keys($triggers) as $name) {
+            DB::unprepared("DROP TRIGGER IF EXISTS `{$name}`");
+        }
+
+        try {
+            $work();
+        } finally {
+            foreach ($triggers as $name => $sql) {
+                DB::unprepared("DROP TRIGGER IF EXISTS `{$name}`");
+                DB::unprepared($sql);
+            }
         }
     }
 
     public function down(): void
     {
-        $this->refuseIfTheLedgerHasHistory();
+        $this->refuseIfMoreThanOneBusinessExists();
 
         foreach (self::UNIQUES as $table => [$name, $columns]) {
             Schema::table($table, function (Blueprint $blueprint) use ($name, $columns): void {
@@ -177,16 +243,27 @@ return new class extends Migration
             return;
         }
 
-        $id = DB::table('businesses')->insertGetId([
+        // A previous failed run may have got this far already.
+        $id = DB::table('businesses')->orderBy('id')->value('id') ?? DB::table('businesses')->insertGetId([
             'name' => 'MonyMonk',
             'locale' => 'en',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        foreach ([...self::SCOPED, 'users'] as $table) {
-            DB::table($table)->update(['business_id' => $id]);
-        }
+        // `ledger_entries` and `audit_logs` carry BEFORE UPDATE triggers that refuse
+        // every update, which is the point of them — and which also refuses this one.
+        //
+        // Stamping which books a row was always in is not editing what happened, and
+        // the alternative would be to make an existing office erase its ledger to come
+        // along. So the guards come off for the length of the backfill and go straight
+        // back on, the same way `ledger:purge` does it, and for the same reason: this
+        // is a named, visible operation rather than somebody at a prompt.
+        $this->withAppendOnlyGuardsOff(function () use ($id): void {
+            foreach ([...self::SCOPED, 'users'] as $table) {
+                DB::table($table)->whereNull('business_id')->update(['business_id' => $id]);
+            }
+        });
 
         $owner = DB::table('users')->orderBy('id')->value('id');
 
@@ -195,16 +272,24 @@ return new class extends Migration
         }
     }
 
-    private function refuseIfTheLedgerHasHistory(): void
+    /**
+     * The direction that can destroy something.
+     *
+     * Rolling forward merges nothing: there is only ever one business to attach rows to.
+     * Rolling back with several would drop the one column that says whose each row is,
+     * leaving every office's clients, balances and entries in a single pile with no way
+     * to tell them apart again.
+     */
+    private function refuseIfMoreThanOneBusinessExists(): void
     {
-        $entries = DB::table('ledger_entries')->count();
+        $businesses = DB::table('businesses')->count();
 
-        if ($entries > 0) {
+        if ($businesses > 1) {
             throw new RuntimeException(
-                "There are {$entries} ledger entries here from before books were kept per "
-                .'business. They would all be handed to one founding business, which is right '
-                .'when that is what they are and wrong the moment it is not. Run '
-                .'`php artisan ledger:purge` first, or restore a backup and export what you need.'
+                "There are {$businesses} businesses here. Rolling this back drops the column "
+                .'that says which of them each client, balance and ledger entry belongs to, '
+                .'and they cannot be told apart again afterwards. Export what you need first, '
+                .'or delete the businesses you are not keeping.'
             );
         }
     }

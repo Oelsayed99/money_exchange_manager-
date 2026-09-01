@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Domain\Tenancy\CurrentBusiness;
+use App\Domain\Tenancy\Exceptions\AccountHasNoBooks;
 use App\Models\Business;
 use App\Models\User;
 use Closure;
@@ -30,8 +31,17 @@ final class ResolveBusiness
     {
         $user = Auth::user();
 
-        if ($user instanceof User && $user->business instanceof Business) {
-            app(CurrentBusiness::class)->set($user->business);
+        if ($user instanceof User) {
+            // Signed in and attached to nothing. Sign-up cannot produce this — it creates
+            // both in one transaction — but a database migrated from before books were
+            // kept per business can, and the symptom was a stack trace on every screen.
+            $business = $user->business;
+
+            if (! $business instanceof Business) {
+                throw new AccountHasNoBooks;
+            }
+
+            app(CurrentBusiness::class)->set($business);
         }
 
         return $next($request);

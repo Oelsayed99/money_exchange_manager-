@@ -268,6 +268,29 @@ describe('when no business is bound', function (): void {
     });
 });
 
+/*
+ * The owner met this as a stack trace on the login screen, on a database that had not
+ * been migrated yet. Sign-up cannot produce the state — it creates the person and the
+ * business in one transaction — but an older account can be in it.
+ */
+describe('an account attached to no business', function (): void {
+    it('says what is wrong instead of throwing a scoping error at them', function (): void {
+        $orphan = app(CurrentBusiness::class)->across(fn (): User => User::factory()->create());
+        $orphan->forceFill(['business_id' => null])->save();
+
+        $response = $this->actingAs($orphan)->get('/dashboard');
+
+        $response->assertStatus(500)
+            ->assertSee('This account has no books yet')
+            ->assertSee('php artisan migrate');
+    });
+
+    it('leaves a guest alone, who has no books to fail to find', function (): void {
+        $this->get('/login')->assertOk();
+        $this->get('/')->assertOk();
+    });
+});
+
 describe('writes land where the books are open', function (): void {
     it('stamps a new row with the open business without being asked', function (): void {
         $party = app(CurrentBusiness::class)->actingAs(
