@@ -12,7 +12,7 @@ A multi-currency financial management application for a money-exchange business:
 
 **Authoritative specification:** supplied by the owner across two messages, 24 sections. Not stored in the repo. `docs/ASSESSMENT.md` is the Section 24 assessment derived from it; `docs/posting-rules.md` is the agreed Section 7 design.
 
-**Real-world input:** the owner supplied a screenshot of the spreadsheet this replaces — a per-counterparty EGP statement for سالم التجريبي. It drives several tests. Key figures: nine credit deposits totalling **3,957,540**; a settlement of **2,574,000** leaving **1,383,540**; deliveries at rates 51.48, 51.48, 51.48, 50.8. Its single signed running-balance column flips between `(899,510)` and `50,490` — the exact problem the four-bucket model solves.
+**The reference fixture:** the tests are driven by a synthetic per-counterparty EGP statement for سالم التجريبي, modelled on the kind of spreadsheet this application replaces. Its shape is the point: nine credit deposits totalling **3,957,540**; a settlement of **2,574,000** leaving **1,383,540**; deliveries at rates 51.48, 51.48, 51.48, 50.8. Its single signed running-balance column flips between `(899,510)` and `50,490` — the exact problem the four-bucket model solves. No real counterparty, account or balance appears anywhere in this repository.
 
 ---
 

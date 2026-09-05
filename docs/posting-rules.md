@@ -266,7 +266,7 @@ Pending *inflows* are deliberately excluded from `available`. Money someone has 
 
 ## 8. Worked example — the real statement
 
-Validated against the supplied EGP statement for سالم التجريبي. Every row reconciles under these rules.
+Validated against the reference EGP statement fixture for سالم التجريبي. Every row reconciles under these rules.
 
 **Money arriving** (nine tranches, 12–15 June, totalling 3,957,540 EGP) — each a **credit deposit**:
 ```
